@@ -1,0 +1,13 @@
+.superpowers/
+.claude/workflow/
+qingyin.pem
+*.jks
+*.keystore
+local.properties
+.android-sdk/
+.gradle/
+**/build/
+__pycache__/
+.pytest_cache/
+.venv/
+.env
