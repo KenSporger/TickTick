@@ -73,6 +73,15 @@ class DataReminderTest {
         assertEquals(task.reminderAt!!.plusHours(2), gateway.scheduled.last().second)
     }
 
+    @Test fun deletedCloudTaskStaysHiddenAfterRefresh() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi {
+            SyncResponse(listOf(completeTask().copy(id = "read", title = "阅读书籍", status = TaskStatus.DELETED).toDto()), "2026-10-03T10:00:00Z")
+        })
+        assertTrue(repository.refreshFromCloud())
+        assertEquals(1, repository.storedCount())
+        assertTrue(repository.current().none { it.id == "read" })
+    }
+
     @Test fun deletingTaskLeavesTombstonePendingForServerSync() = runTest {
         val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
         repository.upsert(completeTask().copy(id = "delete-me"))

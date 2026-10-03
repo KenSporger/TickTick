@@ -24,6 +24,8 @@ def task(task_id: str, title: str, **overrides):
         "repeat_rule": {
             "kind": "NONE", "weekdays": [], "month_day": None,
             "total_count": None, "occurrence_index": 1,
+            "interval": 1, "skip_holidays": False,
+            "excluded_dates": [], "repeat_until": None,
         },
         "status": "ACTIVE",
         "is_projection": False,
@@ -40,6 +42,8 @@ def test_crud_round_trip_all_task_shapes(client):
         repeat_rule={
             "kind": "WEEKLY", "weekdays": [2, 4], "month_day": None,
             "total_count": 8, "occurrence_index": 1,
+            "interval": 1, "skip_holidays": False,
+            "excluded_dates": [], "repeat_until": None,
         },
     )
     multi_day = task("multi", "持续两天的任务", start_date="2026-10-04", end_date="2026-10-05")
@@ -95,6 +99,23 @@ def test_search_supports_pinyin_initials_and_subsequence(client):
     client.post("/api/tasks", json=task("meeting", "Weekly Meeting"))
     assert [item["id"] for item in client.get("/api/tasks/search", params={"q": "yd"}).json()] == ["read"]
     assert [item["id"] for item in client.get("/api/tasks/search", params={"q": "wkmt"}).json()] == ["meeting"]
+
+
+def test_repeat_exception_round_trips(client):
+    payload = task(
+        "sunday",
+        "看书",
+        repeat_rule={
+            "kind": "WEEKLY", "weekdays": [7], "month_day": None,
+            "total_count": None, "occurrence_index": 1,
+            "interval": 1, "skip_holidays": False,
+            "excluded_dates": ["2026-10-11"], "repeat_until": None,
+        },
+    )
+    assert client.post("/api/tasks", json=payload).json()["repeat_rule"]["excluded_dates"] == ["2026-10-11"]
+    synced = client.post("/api/sync", json={"tasks": []}).json()
+    stored = next(item for item in synced["tasks"] if item["id"] == "sunday")
+    assert stored["repeat_rule"]["excluded_dates"] == ["2026-10-11"]
 
 
 def test_invalid_date_range_is_rejected(client):

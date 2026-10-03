@@ -14,6 +14,10 @@ interface TaskRepository {
     suspend fun tasksForDate(date: LocalDate): List<Task>
     suspend fun overdue(today: LocalDate): List<Task>
     suspend fun search(query: String): List<Task>
+    suspend fun current(): List<Task>
+    suspend fun storedCount(): Int
+    fun cloudSyncEnabled(): Boolean
+    suspend fun refreshFromCloud(): Boolean
     suspend fun syncPending(): Int
 }
 

@@ -15,9 +15,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.personalticktick.app.TickTickTestRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8200/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://8.133.175.86/ticktick-api/\"")
     }
 
     buildTypes {
