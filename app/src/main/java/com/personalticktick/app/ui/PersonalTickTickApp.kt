@@ -118,7 +118,15 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel) {
             bottomBar = { BottomNavigation(state.page, viewModel::navigate) },
             floatingActionButton = {
                 if (state.page != AppPage.SEARCH && state.editor == null) Surface(
-                    modifier = Modifier.size(56.dp).clickable { viewModel.create(if (state.page == AppPage.CALENDAR) state.calendarAnchor else LocalDate.now()) }.tagged("创建任务"),
+                    modifier = Modifier.size(56.dp).clickable {
+                        viewModel.create(
+                            when (state.page) {
+                                AppPage.CALENDAR -> state.calendarAnchor
+                                AppPage.INBOX -> null
+                                else -> LocalDate.now()
+                            }
+                        )
+                    }.tagged("创建任务"),
                     shape = CircleShape, color = Primary, shadowElevation = 8.dp
                 ) { Box(contentAlignment = Alignment.Center) { Text("+", fontSize = 30.sp, color = Color.White) } }
             }
@@ -128,6 +136,7 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel) {
                     AppPage.TODAY -> TodayScreen(state, viewModel)
                     AppPage.CALENDAR -> CalendarScreen(state, viewModel)
                     AppPage.SEARCH -> SearchScreen(state, viewModel)
+                    AppPage.INBOX -> InboxScreen(state, viewModel)
                 }
             }
         }
@@ -146,7 +155,7 @@ private fun BottomNavigation(page: AppPage, navigate: (AppPage) -> Unit) {
         NavItem("✓", "任务", page == AppPage.TODAY) { navigate(AppPage.TODAY) }
         NavItem("▦", "日历", page == AppPage.CALENDAR) { navigate(AppPage.CALENDAR) }
         NavItem("⌕", "搜索", page == AppPage.SEARCH) { navigate(AppPage.SEARCH) }
-        NavItem("◇", "我的", false) { }
+        NavItem("▢", "收集箱", page == AppPage.INBOX) { navigate(AppPage.INBOX) }
     }
 }
 
@@ -183,6 +192,18 @@ private fun TodayScreen(state: AppUiState, vm: TickTickViewModel) {
     }
 }
 
+@Composable
+private fun InboxScreen(state: AppUiState, vm: TickTickViewModel) {
+    val items = remember(state.tasks) { vm.visibleInboxTasks() }
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp).tagged("inbox-screen")) {
+        Header("收集箱")
+        LazyColumn(Modifier.fillMaxSize()) {
+            if (items.isEmpty()) item { EmptyState("收集箱是空的", "记下以后要做、现在还不排期的事") }
+            items(items, key = { it.id }) { TaskCard(it, false, vm) }
+        }
+    }
+}
+
 @Composable private fun Header(title: String) {
     Row(Modifier.fillMaxWidth().height(62.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("☰", fontSize = 23.sp, color = TextMuted)
@@ -213,6 +234,9 @@ private fun TaskCard(task: Task, overdue: Boolean, vm: TickTickViewModel, compac
             Text(task.title, Modifier.padding(start = 7.dp).weight(1f).semantics { if (task.status == TaskStatus.ABANDONED) contentDescription = "已放弃 ${task.title}" }, color = if (done) TextMuted else TextMain, fontSize = if (compact) 12.sp else 16.sp, textDecoration = if (done) TextDecoration.LineThrough else null, maxLines = 2)
             if (task.repeatRule.kind != RepeatKind.NONE) Text("↻ ", color = TextMuted)
             if (task.reminderAt != null) Text("♧ ", color = TextMuted)
+            if (!compact && task.status == TaskStatus.ACTIVE && !TaskLifecycle.isInbox(task)) {
+                Text("收集箱", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp).clickable { vm.moveToInbox(task.id) }.tagged("移到收集箱"))
+            }
             if (!compact && task.status == TaskStatus.ACTIVE) Text("放弃", color = Danger, fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp).clickable { vm.abandon(task.id) }.tagged("abandon-task"))
             Text(dateText, color = if (overdue && !done) Danger else TextMuted, fontSize = if (compact) 10.sp else 13.sp)
         }
@@ -405,6 +429,9 @@ private fun DayColumn(day: LocalDate, state: AppUiState, vm: TickTickViewModel, 
                 Text("▦  ${dateChip(editor)}", color = Primary, fontSize = 14.sp)
             }
             Spacer(Modifier.weight(1f))
+            if (editor.startDate != null || editor.endDate != null) {
+                Text("移到收集箱", color = TextMuted, modifier = Modifier.padding(end = 14.dp).clickable { vm.parkEditorInInbox() }.tagged("移到收集箱"))
+            }
             if (editor.editingId != null && vm.state.value.tasks.firstOrNull { it.id == editor.editingId }?.status == TaskStatus.ACTIVE) {
                 Text("放弃", color = TextMuted, modifier = Modifier.padding(end = 14.dp).clickable { vm.abandon(editor.editingId) }.tagged("abandon-task"))
             }

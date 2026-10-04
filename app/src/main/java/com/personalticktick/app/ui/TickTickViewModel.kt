@@ -28,7 +28,7 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.UUID
 
-enum class AppPage { TODAY, CALENDAR, SEARCH }
+enum class AppPage { TODAY, CALENDAR, SEARCH, INBOX }
 enum class TodayMode { OVERDUE, TODAY }
 enum class EditorPanel { NONE, DATE, REMINDER, REPEAT }
 enum class DateMode { SINGLE, RANGE }
@@ -269,6 +269,35 @@ class TickTickViewModel(private val repository: TaskRepository) : ViewModel() {
         if (task.status != TaskStatus.ACTIVE) return
         store(task.copy(status = TaskStatus.ABANDONED, updatedAt = LocalDateTime.now(), syncState = SyncState.PENDING))
     }
+
+    fun moveToInbox(id: String) {
+        val task = _state.value.tasks.firstOrNull { it.id == id } ?: return
+        if (TaskLifecycle.isInbox(task)) return
+        store(TaskLifecycle.moveToInbox(task).copy(updatedAt = LocalDateTime.now(), syncState = SyncState.PENDING))
+    }
+
+    fun parkEditorInInbox() {
+        val editor = _state.value.editor ?: return
+        val editingId = editor.editingId
+        if (editingId != null) {
+            moveToInbox(editingId)
+            return
+        }
+        updateEditor {
+            it.copy(
+                startDate = null,
+                endDate = null,
+                time = null,
+                reminderEnabled = false,
+                reminderLabel = "关闭",
+                repeatKind = RepeatKind.NONE,
+                weekdays = emptySet(),
+                panel = EditorPanel.NONE
+            )
+        }
+    }
+
+    fun visibleInboxTasks(): List<Task> = TaskLifecycle.inboxItems(_state.value.tasks)
 
     fun undoComplete() {
         val id = _state.value.lastCompletedId ?: return

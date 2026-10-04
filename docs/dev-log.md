@@ -1,5 +1,19 @@
 # Development Verification Log
 
+## 2026-10-04 Inbox device UI
+
+| Time | Action | P0 Result | P1 Result | Details |
+|---|---|---|---|---|
+| 2026-10-04 19:18 CST | First `connectedDebugAndroidTest` on ELI-AN00 | ❌ 6/8 | inbox ✅ | `inboxKeepsUnscheduledTasksOffTodayAndCalendar` passed. `complexTimeCronAndRangeChip` failed: `到` also matched 移到收集箱. `deleteThisOccurrenceKeepsLaterRepeats` failed: Sunday is last cell of current week so next daily round is off-screen. |
+| 2026-10-04 19:19 CST | Assertion fixes + rerun | ❌ 7/8 | — | Range chip now asserted via `打开日期` tag. Sunday swipe exposed 14 `阅读书籍` nodes; `onNodeWithText` requires a unique match. |
+| 2026-10-04 19:20 CST | Use first visible future occurrence | ✅ 8/8 | inbox on device | `./gradlew connectedDebugAndroidTest` BUILD SUCCESSFUL. Finished 8 tests on ELI-AN00 - 15, 0 failed. |
+
+## 2026-10-04 Inbox page
+
+| Time | Action | P0 Result | P1 Result | Details |
+|---|---|---|---|---|
+| 2026-10-04 19:11 CST | Replace 我的 with 收集箱; unscheduled store + move-off-schedule | ✅ unit + API + APK | ❌ device UI | RED: `isInbox`/`moveToInbox`/`inboxItems` unresolved. GREEN: `./gradlew testDebugUnitTest` 28 passed (TaskDomainTest 21). `python3 -m pytest backend/tests -q`: 5 passed. `./gradlew assembleDebug` exit 0; `app-debug.apk` 11,540,030 bytes. `compileDebugAndroidTestKotlin` exit 0. `adb devices` empty, so `inboxKeepsUnscheduledTasksOffTodayAndCalendar` did not run on phone. |
+
 ## Phase 2: Development Verification
 
 | Time | Task | Gate1 (Red) | Gate2 (Green) | Review A (Spec) | Review B (Quality) | File Scope | Independent Test |

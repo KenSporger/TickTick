@@ -186,4 +186,40 @@ class TaskDomainTest {
         assertTrue(TaskSearch.matches("阅读书籍", "yuedu"))
         assertFalse(TaskSearch.matches("阅读书籍", "zz"))
     }
+
+    @Test fun undatedActiveTaskLivesInInboxAndNeverAppearsOnTaskOrCalendarDays() {
+        val inbox = task(start = null, end = null)
+        val today = LocalDate.of(2026, 10, 2)
+        assertTrue(TaskLifecycle.isInbox(inbox))
+        assertFalse(TaskLifecycle.occursOn(inbox, today))
+        assertFalse(TaskLifecycle.isVisibleOn(inbox, today))
+        assertFalse(TaskLifecycle.isOverdue(inbox, today.plusDays(1)))
+        assertFalse(TaskLifecycle.isInbox(task(today)))
+    }
+
+    @Test fun movingAScheduledTaskToInboxClearsScheduleAndHidesItFromDatedViews() {
+        val scheduled = task(
+            LocalDate.of(2026, 10, 2),
+            time = LocalTime.of(13, 0),
+            repeat = RepeatRule(RepeatKind.DAILY)
+        ).copy(reminderAt = LocalDateTime.of(2026, 10, 2, 13, 0))
+        val inbox = TaskLifecycle.moveToInbox(scheduled)
+        assertTrue(TaskLifecycle.isInbox(inbox))
+        assertNull(inbox.startDate)
+        assertNull(inbox.endDate)
+        assertNull(inbox.time)
+        assertNull(inbox.reminderAt)
+        assertEquals(RepeatKind.NONE, inbox.repeatRule.kind)
+        assertFalse(TaskLifecycle.occursOn(inbox, LocalDate.of(2026, 10, 2)))
+        assertFalse(TaskLifecycle.isOverdue(inbox, LocalDate.of(2026, 10, 3)))
+    }
+
+    @Test fun inboxListKeepsUnscheduledTasksAndExcludesDatedOrDeletedOnes() {
+        val active = task(null).copy(id = "inbox-active")
+        val dated = task(LocalDate.of(2026, 10, 2)).copy(id = "dated")
+        val deleted = task(null).copy(id = "deleted", status = TaskStatus.DELETED)
+        val completed = task(null).copy(id = "inbox-done", status = TaskStatus.COMPLETED)
+        val items = TaskLifecycle.inboxItems(listOf(active, dated, deleted, completed))
+        assertEquals(listOf("inbox-active", "inbox-done"), items.map { it.id })
+    }
 }

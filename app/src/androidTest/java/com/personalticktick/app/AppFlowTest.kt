@@ -1,8 +1,10 @@
 package com.personalticktick.app
 
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -24,6 +26,7 @@ import org.junit.rules.RuleChain
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
 
@@ -110,7 +113,7 @@ class AppFlowTest {
         composeRule.onNodeWithText("时间段").performClick()
         composeRule.onNodeWithText("8").performClick()
         composeRule.onNodeWithTag("完成日期").performClick()
-        composeRule.onNodeWithText("到", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("打开日期").assert(hasText("到", substring = true))
     }
 
     @Test
@@ -121,6 +124,31 @@ class AppFlowTest {
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("阅读书籍").assertCountEquals(0)
         composeRule.onNodeWithContentDescription("日历").performClick()
+        val today = LocalDate.now()
+        if (today.dayOfWeek == DayOfWeek.SUNDAY) {
+            composeRule.onNodeWithTag("month-screen").performTouchInput { swipeLeft() }
+            composeRule.waitForIdle()
+        }
+        composeRule.onAllNodesWithText("阅读书籍").onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun inboxKeepsUnscheduledTasksOffTodayAndCalendar() {
+        composeRule.onNodeWithContentDescription("收集箱").performClick()
+        composeRule.onNodeWithTag("inbox-screen").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("创建任务").performClick()
+        composeRule.onNodeWithTag("task-title-input").performTextInput("以后再买机票")
+        composeRule.onNodeWithText("无日期", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("保存").performClick()
+        composeRule.onNodeWithText("以后再买机票").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("任务").performClick()
+        composeRule.onAllNodesWithText("以后再买机票").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("移到收集箱").onFirst().performClick()
+        composeRule.onAllNodesWithText("阅读书籍").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("日历").performClick()
+        composeRule.onAllNodesWithText("阅读书籍").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("收集箱").performClick()
+        composeRule.onNodeWithText("以后再买机票").assertIsDisplayed()
         composeRule.onNodeWithText("阅读书籍").assertIsDisplayed()
     }
 

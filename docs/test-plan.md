@@ -12,6 +12,7 @@
 | recurrence | create finite rule → complete/skip → edit/delete scope | next occurrence generated | future projection blocked | 29/30/31 month clamp |
 | week/month browse | open calendar → switch views/weeks/months | seven cells and month panels | overflow shows count | cross-month range |
 | fuzzy search | open search → enter chars/pinyin → select result | live ordered matches | no-results state | empty query recent list |
+| inbox collect | open 收集箱 → create undated → move dated task in | inbox shows them; Today/Calendar hide them | deleted stays out | completed undated remains searchable |
 | offline sync | disconnect → mutate → reconnect | pending then synced | server error retained | repeated retry idempotent |
 
 ## P0 survival tests
@@ -38,6 +39,7 @@
 5. **[e2e] create-edit-search:** user creates, finds, edits, completes and restores the same record.
 6. **[manual] target rendering:** Honor 200 comparison against two reference screenshots.
 7. **[manual] reminder:** MagicOS exact-alarm/background behavior measured on the physical phone.
+8. **[frontend] inbox:** undated tasks stay in 收集箱; moving a dated task clears schedule and hides it from Today/Calendar.
 
 ## P1-E2E scenario cases
 
@@ -47,6 +49,7 @@
 - **E2E-S4:** create offline → PENDING visible → backend restored → sync → server and Room match and state SYNCED.
 - **E2E-S5:** search `yd` → result contains 阅读书籍 and 运动 when seeded → tap result → edit sheet opens.
 - **E2E-S6:** old task appears under Overdue with title active/date overdue; reschedule to today → moves to Today.
+- **E2E-S7:** 收集箱 → create undated “以后再买机票” → Today/Calendar do not show it; move 阅读书籍 into inbox → it leaves Today/Calendar and appears in 收集箱.
 
 ## Traceability
 

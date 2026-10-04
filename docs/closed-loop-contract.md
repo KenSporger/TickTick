@@ -19,6 +19,7 @@
 | REQ-08 complete/restore/skip | repository/domain tests | lifecycle test suite | all transitions pass | ✅ |
 | REQ-09 fuzzy search | corpus/API tests | search tests | Chinese/subsequence/English/pinyin pass | ✅ |
 | REQ-10 online persistence | backend integration + HTTP tests | API test suite | create/read/update/delete/search pass | ✅ locally / ❌ production deployment |
+| REQ-11 Inbox unscheduled store | domain unit tests + Compose UI test | lifecycle + AppFlow inbox case | unscheduled only in inbox; move hides from Today/Calendar | ✅ |
 | APK builds | exit code + artifact | Gradle assembleDebug | exit 0 and APK exists | ✅ |
 | Pixel similarity on target phone | human judgement | Honor 200 side-by-side review | accepted by user | ❌ |
 

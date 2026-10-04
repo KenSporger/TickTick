@@ -109,6 +109,26 @@ object TaskLifecycle {
         return date.isAfter(end) && occursOn(task, date)
     }
 
+    /** Unscheduled tasks live in 收集箱 and stay off Today / Calendar. */
+    fun isInbox(task: Task): Boolean {
+        if (task.status == TaskStatus.DELETED || task.status == TaskStatus.SKIPPED) return false
+        return task.startDate == null && task.endDate == null
+    }
+
+    fun inboxItems(tasks: List<Task>): List<Task> =
+        tasks.filter(::isInbox).sortedWith(
+            compareBy<Task> { it.status != TaskStatus.ACTIVE }.thenByDescending { it.updatedAt }
+        )
+
+    fun moveToInbox(task: Task): Task = task.copy(
+        startDate = null,
+        endDate = null,
+        time = null,
+        reminderAt = null,
+        repeatRule = RepeatRule(),
+        isProjection = false
+    )
+
     private fun nextStart(start: LocalDate, rule: RepeatRule): LocalDate {
         var next = advance(start, rule)
         var guard = 0
