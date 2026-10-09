@@ -170,7 +170,7 @@ private fun BottomNavigation(page: AppPage, navigate: (AppPage) -> Unit) {
 private fun TodayScreen(state: AppUiState, vm: TickTickViewModel) {
     val today = LocalDate.now()
     val overdue = state.tasks.filter { TaskLifecycle.isOverdue(it, today) }
-    val todayTasks = state.tasks.filter { TaskLifecycle.occursOn(it, today) }.sortedBy { it.status != TaskStatus.ACTIVE }
+    val todayTasks = state.tasks.filter { TaskLifecycle.isVisibleOn(it, today) }.sortedBy { it.status != TaskStatus.ACTIVE }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp)) {
         Header("今天")
         Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -230,7 +230,7 @@ private fun TaskCard(task: Task, overdue: Boolean, vm: TickTickViewModel, compac
         color = if (done) Color(0xFF1A1B1E) else Card, shape = RoundedCornerShape(if (compact) 5.dp else 10.dp)
     ) {
         Row(Modifier.padding(if (compact) 7.dp else 13.dp), verticalAlignment = Alignment.CenterVertically) {
-            StatusMark(abandoned = task.status == TaskStatus.ABANDONED, completed = task.status == TaskStatus.COMPLETED, compact = compact) { vm.toggleComplete(task.id) }
+            StatusMark(abandoned = task.status == TaskStatus.ABANDONED, completed = task.status == TaskStatus.COMPLETED, compact = compact) { vm.toggleComplete(task.id, onDate) }
             Text(task.title, Modifier.padding(start = 7.dp).weight(1f).semantics { if (task.status == TaskStatus.ABANDONED) contentDescription = "已放弃 ${task.title}" }, color = if (done) TextMuted else TextMain, fontSize = if (compact) 12.sp else 16.sp, textDecoration = if (done) TextDecoration.LineThrough else null, maxLines = 2)
             if (task.repeatRule.kind != RepeatKind.NONE) Text("↻ ", color = TextMuted)
             if (task.reminderAt != null) Text("♧ ", color = TextMuted)
@@ -346,23 +346,25 @@ private fun MiniMonth(month: YearMonth, selected: LocalDate, modifier: Modifier,
 
 @Composable
 private fun DayColumn(day: LocalDate, state: AppUiState, vm: TickTickViewModel, modifier: Modifier) {
-    val tasks = state.tasks.filter { TaskLifecycle.occursOn(it, day) && (state.showCompleted || !it.isDone() || TaskLifecycle.isFutureOccurrence(it, day)) }
-        .sortedBy { it.isDone() && !TaskLifecycle.isFutureOccurrence(it, day) }
-    val today = day == LocalDate.now()
+    val today = LocalDate.now()
+    val tasks = state.tasks.filter { TaskLifecycle.occursOn(it, day) && (state.showCompleted || !it.isDone() || TaskLifecycle.isProjectedOccurrence(it, day)) }
+        .sortedBy { it.isDone() && !TaskLifecycle.isProjectedOccurrence(it, day) }
+    val isToday = day == today
     Column(modifier.padding(3.dp).tagged("month-day-panel")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(dayHeading(day), color = if (today) Primary else TextMain, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(dayHeading(day), color = if (isToday) Primary else TextMain, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             if (ChinaHolidays.isHoliday(day)) Text(" 休", color = Holiday, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             tasks.forEach { task ->
-                val projected = TaskLifecycle.isFutureOccurrence(task, day)
+                val projected = TaskLifecycle.isProjectedOccurrence(task, day)
+                val operable = TaskLifecycle.canCompleteOn(task, day, today)
                 val done = !projected && task.isDone()
                 Row(
                     Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(5.dp)).background(if (done) Color(0xFF1A1C20) else TaskBlue).clickable { vm.edit(task, day) }.padding(horizontal = 4.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StatusMark(abandoned = !projected && task.status == TaskStatus.ABANDONED, completed = !projected && task.status == TaskStatus.COMPLETED, compact = true) { if (!projected) vm.toggleComplete(task.id) }
+                    StatusMark(abandoned = !projected && task.status == TaskStatus.ABANDONED, completed = !projected && task.status == TaskStatus.COMPLETED, compact = true) { if (operable) vm.toggleComplete(task.id, day) }
                     Text(task.title, Modifier.weight(1f), color = if (done) TextMuted else TextMain, fontSize = 11.sp, maxLines = 1, textDecoration = if (done) TextDecoration.LineThrough else null)
                     task.time?.let { Text(it.format(DateTimeFormatter.ofPattern("HH:mm")), color = TextMuted, fontSize = 10.sp) }
                 }

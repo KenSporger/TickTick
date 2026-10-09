@@ -74,7 +74,7 @@ data class AppUiState(
 /** Boundary used by the later Room/network integration without coupling composables to storage. */
 interface TaskUiGateway {
     suspend fun save(task: Task)
-    suspend fun complete(id: String)
+    suspend fun complete(id: String, today: LocalDate)
     suspend fun restore(id: String)
     suspend fun delete(id: String, futureSeries: Boolean)
 }
@@ -102,6 +102,7 @@ class TickTickViewModel(private val repository: TaskRepository) : ViewModel() {
                 demoTasks(LocalDateTime.now()).forEach { repository.upsert(it) }
                 if (repository.cloudSyncEnabled()) repository.refreshFromCloud()
             }
+            repository.repairClosedSeries(LocalDate.now())
             _state.value = AppUiState(tasks = repository.current())
         }
         viewModelScope.launch {
@@ -257,17 +258,52 @@ class TickTickViewModel(private val repository: TaskRepository) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) { repository.syncPending() }
     }
 
-    fun toggleComplete(id: String) {
+    fun toggleComplete(id: String, onDate: LocalDate? = null) {
+        val today = LocalDate.now()
         val task = _state.value.tasks.firstOrNull { it.id == id } ?: return
-        val completing = task.status == TaskStatus.ACTIVE
-        store(task.copy(status = if (completing) TaskStatus.COMPLETED else TaskStatus.ACTIVE, updatedAt = LocalDateTime.now(), syncState = SyncState.PENDING))
-        _state.update { it.copy(lastCompletedId = if (completing) id else null) }
+        if (onDate != null && !TaskLifecycle.canCompleteOn(task, onDate, today)) return
+        when (task.status) {
+            TaskStatus.ACTIVE -> {
+                runBlocking(Dispatchers.IO) { repository.complete(id, today) }
+                refreshTasks(lastCompletedId = id)
+            }
+            TaskStatus.COMPLETED -> {
+                val restored = runBlocking(Dispatchers.IO) { repository.restore(id) }
+                if (restored == null) {
+                    _state.update { it.copy(message = "下一周期已经处理，无法撤销") }
+                    return
+                }
+                refreshTasks(lastCompletedId = null)
+            }
+            TaskStatus.ABANDONED -> {
+                val restored = runBlocking(Dispatchers.IO) { repository.restore(id) }
+                if (restored == null) {
+                    _state.update { it.copy(message = "下一周期已经处理，无法撤销") }
+                    return
+                }
+                refreshTasks(lastCompletedId = null)
+            }
+            else -> return
+        }
     }
 
-    fun abandon(id: String) {
-        val task = _state.value.tasks.firstOrNull { it.id == id } ?: return
+    private fun refreshTasks(lastCompletedId: String?) {
+        _state.update { it.copy(tasks = runBlocking(Dispatchers.IO) { repository.current() }, lastCompletedId = lastCompletedId) }
+        viewModelScope.launch(Dispatchers.IO) { repository.syncPending() }
+    }
+
+    fun abandon(id: String?) {
+        val taskId = id ?: return
+        val task = _state.value.tasks.firstOrNull { it.id == taskId } ?: return
         if (task.status != TaskStatus.ACTIVE) return
-        store(task.copy(status = TaskStatus.ABANDONED, updatedAt = LocalDateTime.now(), syncState = SyncState.PENDING))
+        runBlocking(Dispatchers.IO) { repository.abandon(taskId, LocalDate.now()) }
+        _state.update {
+            it.copy(
+                tasks = runBlocking(Dispatchers.IO) { repository.current() },
+                editor = null
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) { repository.syncPending() }
     }
 
     fun moveToInbox(id: String) {

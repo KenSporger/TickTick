@@ -92,6 +92,74 @@ class DataReminderTest {
         assertEquals(SyncState.PENDING, tombstone.syncState)
     }
 
+    @Test fun completingDailyRepeatMaterializesNextAndCatchUpSkipsMissedDays() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        repository.upsert(dailyJournal(LocalDate.of(2026, 10, 1)))
+        val completed = repository.complete("journal", LocalDate.of(2026, 10, 9))
+        assertEquals(TaskStatus.COMPLETED, completed?.status)
+        val next = repository.find("journal:9")
+        assertEquals(LocalDate.of(2026, 10, 9), next?.startDate)
+        assertEquals(TaskStatus.ACTIVE, next?.status)
+        assertEquals(9, next?.repeatRule?.occurrenceIndex)
+    }
+
+    @Test fun restoreRepeatingTaskRemovesUnprocessedNextOccurrence() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        repository.upsert(dailyJournal(LocalDate.of(2026, 10, 8)))
+        repository.complete("journal", LocalDate.of(2026, 10, 9))
+        val restored = repository.restore("journal")
+        assertEquals(TaskStatus.ACTIVE, restored?.status)
+        assertNull(repository.find("journal:2"))
+    }
+
+    @Test fun abandoningADailyRepeatKeepsLaterCalendarDays() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        repository.upsert(dailyJournal(LocalDate.of(2026, 10, 9)))
+        val abandoned = repository.abandon("journal", LocalDate.of(2026, 10, 9))
+        assertEquals(TaskStatus.ABANDONED, abandoned?.status)
+        val next = repository.find("journal:2")
+        assertEquals(LocalDate.of(2026, 10, 10), next?.startDate)
+        assertEquals(TaskStatus.ACTIVE, next?.status)
+        assertTrue(TaskLifecycle.occursOn(next!!, LocalDate.of(2026, 10, 11)))
+        assertFalse(TaskLifecycle.occursOn(abandoned!!, LocalDate.of(2026, 10, 11)))
+    }
+
+    @Test fun repairClosedSeriesMaterializesNextAfterAbandonedHead() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        val abandoned = dailyJournal(LocalDate.of(2026, 10, 9)).copy(status = TaskStatus.ABANDONED)
+        repository.upsert(abandoned)
+        assertEquals(1, repository.repairClosedSeries(LocalDate.of(2026, 10, 9)))
+        val next = repository.find("journal:2")
+        assertEquals(LocalDate.of(2026, 10, 10), next?.startDate)
+        assertEquals(TaskStatus.ACTIVE, next?.status)
+        assertEquals(0, repository.repairClosedSeries(LocalDate.of(2026, 10, 9)))
+    }
+
+    @Test fun restoringAnAbandonedRepeatRemovesTheUnprocessedNextOccurrence() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        repository.upsert(dailyJournal(LocalDate.of(2026, 10, 9)))
+        repository.abandon("journal", LocalDate.of(2026, 10, 9))
+        val restored = repository.restore("journal")
+        assertEquals(TaskStatus.ACTIVE, restored?.status)
+        assertNull(repository.find("journal:2"))
+    }
+
+    @Test fun restoreIsBlockedOnceTheNextOccurrenceIsProcessed() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        repository.upsert(dailyJournal(LocalDate.of(2026, 10, 8)))
+        repository.complete("journal", LocalDate.of(2026, 10, 9))
+        repository.complete("journal:2", LocalDate.of(2026, 10, 10))
+        assertNull(repository.restore("journal"))
+        assertEquals(TaskStatus.COMPLETED, repository.find("journal")?.status)
+        assertEquals(TaskStatus.COMPLETED, repository.find("journal:2")?.status)
+    }
+
+    private fun dailyJournal(start: LocalDate) = Task(
+        id = "journal", title = "总结一天", startDate = start, endDate = start,
+        repeatRule = RepeatRule(RepeatKind.DAILY),
+        createdAt = start.atTime(8, 0), updatedAt = start.atTime(8, 0)
+    )
+
     private fun completeTask() = Task(
         id = "task-1", seriesId = "series-1", title = "跨天复习",
         startDate = LocalDate.of(2026, 10, 3), endDate = LocalDate.of(2026, 10, 5),

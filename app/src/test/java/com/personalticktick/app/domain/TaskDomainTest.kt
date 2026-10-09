@@ -222,4 +222,50 @@ class TaskDomainTest {
         val items = TaskLifecycle.inboxItems(listOf(active, dated, deleted, completed))
         assertEquals(listOf("inbox-active", "inbox-done"), items.map { it.id })
     }
+
+    @Test fun missedDailyRepeatIsOverdueAndNotAStoredTodayTask() {
+        val missed = task(LocalDate.of(2026, 10, 8), repeat = RepeatRule(RepeatKind.DAILY))
+        val today = LocalDate.of(2026, 10, 9)
+        assertTrue(TaskLifecycle.occursOn(missed, today))
+        assertTrue(TaskLifecycle.isOverdue(missed, today))
+        assertFalse(TaskLifecycle.isVisibleOn(missed, today))
+        assertTrue(TaskLifecycle.isProjectedOccurrence(missed, today))
+        assertTrue(TaskLifecycle.isFutureOccurrence(missed, today, today))
+        assertFalse(TaskLifecycle.canCompleteOn(missed, today, today))
+        assertTrue(TaskLifecycle.canCompleteOn(missed, LocalDate.of(2026, 10, 8), today))
+    }
+
+    @Test fun pastProjectionOfAStuckDailySeriesCanBeCheckedOff() {
+        val stuck = task(LocalDate.of(2026, 10, 1), repeat = RepeatRule(RepeatKind.DAILY))
+        val today = LocalDate.of(2026, 10, 9)
+        val yesterday = LocalDate.of(2026, 10, 8)
+        assertTrue(TaskLifecycle.isOverdue(stuck, today))
+        assertTrue(TaskLifecycle.isProjectedOccurrence(stuck, yesterday))
+        assertTrue(TaskLifecycle.canCompleteOn(stuck, yesterday, today))
+        assertFalse(TaskLifecycle.canCompleteOn(stuck, today, today))
+    }
+
+    @Test fun completingOverdueDailyCatchesUpToTodayWithoutStackingMissedDays() {
+        val missed = task(LocalDate.of(2026, 10, 1), repeat = RepeatRule(RepeatKind.DAILY))
+        val next = TaskLifecycle.nextOccurrence(missed, notBefore = LocalDate.of(2026, 10, 9))
+        assertEquals(LocalDate.of(2026, 10, 9), next?.startDate)
+        assertEquals(9, next?.repeatRule?.occurrenceIndex)
+    }
+
+    @Test fun completedRepeatDoesNotProjectOntoLaterDays() {
+        val done = task(LocalDate.of(2026, 10, 8), repeat = RepeatRule(RepeatKind.DAILY), status = TaskStatus.COMPLETED)
+        assertTrue(TaskLifecycle.occursOn(done, LocalDate.of(2026, 10, 8)))
+        assertFalse(TaskLifecycle.occursOn(done, LocalDate.of(2026, 10, 9)))
+        assertFalse(TaskLifecycle.isOverdue(done, LocalDate.of(2026, 10, 9)))
+    }
+
+    @Test fun abandoningADailyRoundStillProducesTheNextActiveOccurrence() {
+        val abandoned = task(LocalDate.of(2026, 10, 9), repeat = RepeatRule(RepeatKind.DAILY), status = TaskStatus.ABANDONED)
+        assertTrue(TaskLifecycle.occursOn(abandoned, LocalDate.of(2026, 10, 9)))
+        assertFalse(TaskLifecycle.occursOn(abandoned, LocalDate.of(2026, 10, 10)))
+        val next = TaskLifecycle.nextOccurrence(abandoned)
+        assertEquals(LocalDate.of(2026, 10, 10), next?.startDate)
+        assertEquals(TaskStatus.ACTIVE, next?.status)
+        assertTrue(TaskLifecycle.occursOn(next!!, LocalDate.of(2026, 10, 11)))
+    }
 }

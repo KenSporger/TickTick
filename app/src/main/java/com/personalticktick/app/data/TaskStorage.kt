@@ -78,6 +78,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE status != 'DELETED'")
     suspend fun all(): List<TaskEntity>
 
+    @Query("SELECT * FROM tasks")
+    suspend fun allIncludingDeleted(): List<TaskEntity>
+
     @Query("SELECT * FROM tasks WHERE id = :id AND status != 'DELETED'")
     suspend fun find(id: String): TaskEntity?
 
@@ -198,20 +201,70 @@ class RoomTaskRepository(
     }
     override suspend fun find(id: String): Task? = dao.find(id)?.toDomain()
 
-    override suspend fun complete(id: String): Task? = changeStatus(id, TaskStatus.COMPLETED).also { completed ->
-        completed?.also { reminders?.schedule(it) }
-            ?.let(TaskLifecycle::nextOccurrence)?.let {
-                dao.upsert(it.toEntity(SyncState.PENDING))
-                reminders?.schedule(it)
+    override suspend fun complete(id: String, today: LocalDate): Task? =
+        closeOccurrence(id, TaskStatus.COMPLETED, today)
+
+    override suspend fun restore(id: String): Task? {
+        val task = dao.find(id)?.toDomain() ?: return null
+        if (task.status != TaskStatus.COMPLETED && task.status != TaskStatus.ABANDONED) return null
+        if (task.repeatRule.kind != RepeatKind.NONE) {
+            val later = laterInSeries(task)
+            if (later.any { it.status != TaskStatus.ACTIVE }) return null
+            if (later.isNotEmpty()) {
+                val now = LocalDateTime.now()
+                dao.upsertAll(later.map { it.copy(status = TaskStatus.DELETED, updatedAt = now).toEntity(SyncState.PENDING) })
+                later.forEach { reminders?.cancel(it.id) }
             }
+        }
+        return changeStatus(id, TaskStatus.ACTIVE)?.also { reminders?.schedule(it) }
     }
-    override suspend fun restore(id: String): Task? = changeStatus(id, TaskStatus.ACTIVE).also { it?.let { task -> reminders?.schedule(task) } }
-    override suspend fun skip(id: String): Task? = changeStatus(id, TaskStatus.SKIPPED).also { skipped ->
-        skipped?.also { reminders?.schedule(it) }
-            ?.let(TaskLifecycle::nextOccurrence)?.let {
-                dao.upsert(it.toEntity(SyncState.PENDING))
-                reminders?.schedule(it)
-            }
+
+    override suspend fun skip(id: String, today: LocalDate): Task? =
+        closeOccurrence(id, TaskStatus.SKIPPED, today)
+
+    override suspend fun abandon(id: String, today: LocalDate): Task? =
+        closeOccurrence(id, TaskStatus.ABANDONED, today)
+
+    private suspend fun closeOccurrence(id: String, status: TaskStatus, today: LocalDate): Task? =
+        changeStatus(id, status)?.also { closed ->
+            reminders?.schedule(closed)
+            materializeNext(closed, today)
+        }
+
+    private suspend fun materializeNext(closed: Task, today: LocalDate) {
+        val next = TaskLifecycle.nextOccurrence(closed, notBefore = today) ?: return
+        dao.upsert(next.toEntity(SyncState.PENDING))
+        reminders?.schedule(next)
+    }
+
+    override suspend fun repairClosedSeries(today: LocalDate): Int {
+        val groups = dao.all().map(TaskEntity::toDomain).groupBy { it.seriesId ?: it.id }
+        var created = 0
+        for (members in groups.values) {
+            val latest = members.maxWithOrNull(
+                compareBy<Task> { it.startDate ?: LocalDate.MIN }.thenBy { it.repeatRule.occurrenceIndex }
+            ) ?: continue
+            if (latest.repeatRule.kind == RepeatKind.NONE) continue
+            if (latest.status == TaskStatus.ACTIVE) continue
+            if (latest.status != TaskStatus.COMPLETED && latest.status != TaskStatus.ABANDONED &&
+                latest.status != TaskStatus.SKIPPED) continue
+            val next = TaskLifecycle.nextOccurrence(latest, notBefore = today) ?: continue
+            if (dao.find(next.id) != null) continue
+            dao.upsert(next.toEntity(SyncState.PENDING))
+            reminders?.schedule(next)
+            created += 1
+        }
+        return created
+    }
+
+    private suspend fun laterInSeries(task: Task): List<Task> {
+        val root = task.seriesId ?: task.id
+        val start = task.startDate ?: return emptyList()
+        return dao.all().map(TaskEntity::toDomain).filter { candidate ->
+            candidate.id != task.id &&
+                (candidate.seriesId == root || candidate.id == root) &&
+                candidate.startDate?.isAfter(start) == true
+        }
     }
 
     private suspend fun changeStatus(id: String, status: TaskStatus): Task? {
@@ -261,9 +314,15 @@ class RoomTaskRepository(
     }
 
     private suspend fun merge(response: SyncResponse) {
-        val current = dao.all().associateBy { it.id }
-        dao.upsertAll(response.tasks.map { dto ->
-            dto.toDomain(current[dto.id]?.createdAt?.let(LocalDateTime::parse)
+        val current = dao.allIncludingDeleted().associateBy { it.id }
+        dao.upsertAll(response.tasks.mapNotNull { dto ->
+            val existing = current[dto.id]
+            if (existing != null && existing.syncState == SyncState.PENDING.name) {
+                val local = LocalDateTime.parse(existing.updatedAt).atZone(AppZone).toInstant()
+                val remote = OffsetDateTime.parse(dto.updatedAt).toInstant()
+                if (local.isAfter(remote)) return@mapNotNull null
+            }
+            dto.toDomain(existing?.createdAt?.let(LocalDateTime::parse)
                 ?: parseWireTimestamp(dto.updatedAt)).toEntity(SyncState.SYNCED)
         })
     }
