@@ -2,7 +2,7 @@
 
 - 日期：2026-10-02
 - 工作流：Research W4（最佳实践：SCOPE → SURVEY → RANK → DEEP DIVE → ADAPT）
-- 目标：为 `ticktick-1.jpg`、`ticktick-2.jpg` 两个页面的 1:1 MVP 复刻建立可追溯依据
+- 目标：为「今天」页与「月视图」两个页面的 1:1 MVP 复刻建立可追溯依据
 - 平台：Android
 - 证据标签：**【截图已验证】**、**【外部来源已验证】**、**【推测】**
 
@@ -37,7 +37,7 @@
 
 ### 2.1 本地截图观察
 
-#### `ticktick-2.jpg`：「今天」页
+#### 「今天」页
 
 **【截图已验证】**
 
@@ -55,7 +55,7 @@
 - “已过期 / 今天”很可能是同一智能清单内的分组/锚点分页，而不是两个独立模块；横滑或点击标签可能切换或定位。
 - 灯泡可能是“智能建议/推荐任务”入口。当前更新日志提到 V8.0 今天清单新增“推荐任务”，但无法据此证明截图时期灯泡的精确行为。[滴答清单更新日志](https://www.dida365.com/public/changelog/zh.html)
 
-#### `ticktick-1.jpg`：「十月」月视图
+#### 「十月」月视图
 
 **【截图已验证】**
 
@@ -231,8 +231,8 @@
 
 ### 一手来源
 
-1. 用户提供截图：`/root/project/TickTick/ticktick-1.jpg`
-2. 用户提供截图：`/root/project/TickTick/ticktick-2.jpg`
+1. 设计阶段的「今天」页截图（未入库）
+2. 设计阶段的「月视图」截图（未入库）
 3. 滴答清单帮助中心：[快速开始](https://help.dida365.com/start/6194405595563425792)
 4. 滴答清单帮助中心：[智能识别日期](https://help.dida365.com/tips/6427419485019308032/%E6%99%BA%E8%83%BD%E8%AF%86%E5%88%AB%E6%97%A5%E6%9C%9F)
 5. TickTick Help：[Add Tasks](https://help.ticktick.com/articles/7055782422935240704)

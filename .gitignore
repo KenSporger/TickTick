@@ -13,3 +13,6 @@ __pycache__/
 .env
 *.sqlite3
 *.sqlite3-*
+# Phone screenshots at repo root can contain personal tasks
+/*.jpg
+/*.png

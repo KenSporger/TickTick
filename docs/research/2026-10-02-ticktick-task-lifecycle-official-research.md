@@ -261,6 +261,5 @@ ACTIVE(recurrence)
 
 ### 本地截图
 
-17. `/root/project/TickTick/ticktick-1.jpg`
-18. `/root/project/TickTick/ticktick-2.jpg`
+17. 设计阶段的「今天」页与「月视图」截图（未入库）
 

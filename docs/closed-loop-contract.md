@@ -35,7 +35,7 @@
 | Node/npm | ready | available but not required |
 | Docker | optional | `docker compose up` for local API, or run uvicorn directly |
 | External API keys | not required | no third-party API in scope |
-| Test assets | ready | two reference screenshots |
+| Test assets | not published | design screenshots stayed local and are not in the repository |
 | Hosted API | out of scope | operators self-host SQLite + FastAPI; no official public server |
 
 ## Gap list and accepted degradation
