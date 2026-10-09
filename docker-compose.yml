@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      TICKTICK_DB_PATH: /data/tasks.sqlite3
+    volumes:
+      - ticktick-data:/data
+    restart: unless-stopped
+
+volumes:
+  ticktick-data:

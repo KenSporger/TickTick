@@ -1,0 +1,17 @@
+.git
+.gradle
+.kotlin
+.venv
+.pytest_cache
+.android-sdk
+app
+docs
+**/build/
+**/__pycache__/
+*.sqlite3
+local.properties
+*.jpg
+*.png
+*.pem
+*.jks
+*.keystore

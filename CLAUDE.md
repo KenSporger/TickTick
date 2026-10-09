@@ -5,6 +5,6 @@
 - Acceptance criteria are locked by `docs/closed-loop-contract.md`; commands may be adjusted only when logged.
 - No completion claim without fresh command output and exit status.
 - Stop an item after the same failure occurs three consecutive times; stop broad fixes after ten total fix attempts.
-- Never commit or expose `qingyin.pem`, `.env`, keystores, or production data.
-- The inspected Qingyin host and its qy-console directories are read-only context for this project.
+- Never commit or expose `.env`, keystores, `local.properties`, or production data.
+- There is no official hosted API. Operators deploy `backend/` themselves and point the Android app at that URL.
 

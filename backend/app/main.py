@@ -64,10 +64,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         app.state.store = TaskStore(path)
         yield
 
-    app = FastAPI(title="TickTick personal API", lifespan=lifespan)
+    app = FastAPI(title="Personal TickTick API", lifespan=lifespan)
 
     def store(request: Request) -> TaskStore:
         return request.app.state.store
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
 
     @app.post("/api/tasks", response_model=TaskPayload, status_code=status.HTTP_201_CREATED)
     def create_task(payload: TaskPayload, request: Request):

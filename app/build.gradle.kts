@@ -1,8 +1,23 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+}
+
+fun Project.resolveApiBaseUrl(): String {
+    val properties = Properties()
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        localFile.inputStream().use { properties.load(it) }
+    }
+    val configured = (findProperty("ticktick.apiBaseUrl") as String?)
+        ?: properties.getProperty("ticktick.apiBaseUrl")
+        ?: "http://10.0.2.2:8200/"
+    val normalized = configured.trim()
+    return if (normalized.endsWith("/")) normalized else "$normalized/"
 }
 
 android {
@@ -17,7 +32,7 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "com.personalticktick.app.TickTickTestRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "API_BASE_URL", "\"http://8.133.175.86/ticktick-api/\"")
+        buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
     }
 
     buildTypes {

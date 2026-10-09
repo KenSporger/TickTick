@@ -1,0 +1,11 @@
+## Copy this file to local.properties (gitignored), or merge the API line
+## into the local.properties that Android Studio already generated.
+##
+## sdk.dir is machine-specific. Android Studio writes it automatically.
+# sdk.dir=/Users/you/Library/Android/sdk
+#
+## Trailing slash required. Examples:
+##   emulator -> host:     http://10.0.2.2:8200/
+##   phone    -> LAN PC:   http://192.168.1.10:8200/
+##   reverse proxy:        https://your.domain/ticktick-api/
+ticktick.apiBaseUrl=http://10.0.2.2:8200/

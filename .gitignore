@@ -1,6 +1,6 @@
 .superpowers/
 .claude/workflow/
-qingyin.pem
+*.pem
 *.jks
 *.keystore
 local.properties
@@ -11,3 +11,5 @@ __pycache__/
 .pytest_cache/
 .venv/
 .env
+*.sqlite3
+*.sqlite3-*

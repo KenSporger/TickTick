@@ -35,6 +35,10 @@ def task(task_id: str, title: str, **overrides):
     return payload
 
 
+def test_health(client):
+    assert client.get("/health").json() == {"status": "ok"}
+
+
 def test_crud_round_trip_all_task_shapes(client):
     all_day = task("all-day", "明天交材料", start_date="2026-10-03", end_date="2026-10-03")
     timed = task(

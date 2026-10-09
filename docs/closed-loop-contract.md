@@ -33,11 +33,10 @@
 | Android emulator | auto-installable, resource-risk | install only if feasible; otherwise Compose semantics/unit coverage |
 | Python 3.10 | ready | backend runtime and tests |
 | Node/npm | ready | available but not required |
-| Docker | unavailable | use direct Python test environment |
-| SSH credential | ready | `qingyin.pem` verified; ignored by git |
+| Docker | optional | `docker compose up` for local API, or run uvicorn directly |
 | External API keys | not required | no third-party API in scope |
 | Test assets | ready | two reference screenshots |
-| Production database/path | needs human/policy resolution | current server is dedicated to qy-console under its deployment skill |
+| Hosted API | out of scope | operators self-host SQLite + FastAPI; no official public server |
 
 ## Gap list and accepted degradation
 
@@ -45,8 +44,8 @@
 |---|---|---|
 | Pixel-level judgement on Honor 200 | automated screenshots can be produced, but final perception and OEM font/rendering require the physical device | user |
 | MagicOS 9 exact reminder timing and permission path | policy can be tested; real punctuality/background behavior requires the target phone | user |
-| Production deployment target | backend is implemented and locally verified, but the inspected Qingyin host is reserved for qy-console and will not be mutated by this run | user / future deployment decision |
-| No authentication on an internet-facing API | implementation follows the explicit personal-use/no-key decision; exposure risk remains if deployed publicly | user accepted product constraint |
+| Production deployment target | backend is implemented and locally verified; each operator deploys their own instance | operator |
+| No authentication on an internet-facing API | implementation follows the personal-use/no-key decision; do not expose the API to the public internet | operator |
 
 ## Decision
 
