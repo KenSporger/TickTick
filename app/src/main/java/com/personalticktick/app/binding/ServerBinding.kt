@@ -64,7 +64,15 @@ class BindingStore(context: Context) {
         ServerBinding(it, preferences.getString("access_token", "").orEmpty())
     }
     fun save(binding: ServerBinding) {
-        preferences.edit().putString("base_url", binding.baseUrl).putString("access_token", binding.accessToken).apply()
+        preferences.edit().putString("base_url", binding.baseUrl).putString("access_token", binding.accessToken)
+            .remove("pending_base_url").remove("pending_access_token").apply()
+    }
+    fun readPending(): ServerBinding? = preferences.getString("pending_base_url", null)?.let {
+        ServerBinding(it, preferences.getString("pending_access_token", "").orEmpty())
+    }
+    fun savePending(binding: ServerBinding) {
+        preferences.edit().putString("pending_base_url", binding.baseUrl)
+            .putString("pending_access_token", binding.accessToken).commit()
     }
 }
 

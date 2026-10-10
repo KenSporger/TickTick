@@ -32,9 +32,32 @@ class MainActivity : ComponentActivity() {
                         ?: bindingStore.read()
                 )
             }
-            var showBinding by remember { mutableStateOf(activeBinding == null) }
-            var screen by remember { mutableStateOf<BindingScreenState>(BindingScreenState.Welcome) }
+            var pendingBinding by remember { mutableStateOf(bindingStore.readPending()) }
+            var showBinding by remember { mutableStateOf(activeBinding == null || pendingBinding != null) }
+            var screen by remember { mutableStateOf<BindingScreenState>(if (pendingBinding != null) BindingScreenState.Syncing else BindingScreenState.Welcome) }
             var retryAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+            fun bootstrap(binding: ServerBinding) {
+                lifecycleScope.launch {
+                    screen = BindingScreenState.Syncing
+                    try {
+                        withContext(Dispatchers.IO) { ServerBootstrapper(database, ServerApiFactory.create(binding.baseUrl, binding.accessToken).sync).replaceFromServer() }
+                        bindingStore.save(binding)
+                        pendingBinding = null
+                        activeBinding = binding
+                        showBinding = false
+                    } catch (error: Exception) {
+                        screen = BindingScreenState.Failed(error.message ?: "请检查手机网络以及服务器状态。")
+                    }
+                }
+            }
+
+            LaunchedEffect(pendingBinding) {
+                pendingBinding?.let { candidate ->
+                    retryAction = { bootstrap(candidate) }
+                    bootstrap(candidate)
+                }
+            }
 
             fun bind(raw: String) {
                 val payload = try { BindingPayload.parse(raw) } catch (_: ExpiredBindingCode) {
@@ -52,13 +75,10 @@ class MainActivity : ComponentActivity() {
                                 val exchange = ServerApiFactory.create(payload.baseUrl).binding.consume(ConsumeBindingRequest(payload.token))
                                 check(exchange.ok)
                                 sessionToken = exchange.accessToken
+                                val candidate = ServerBinding(payload.baseUrl, exchange.accessToken)
+                                bindingStore.savePending(candidate)
+                                pendingBinding = candidate
                             }
-                            screen = BindingScreenState.Syncing
-                            val binding = ServerBinding(payload.baseUrl, checkNotNull(sessionToken))
-                            withContext(Dispatchers.IO) { ServerBootstrapper(database, ServerApiFactory.create(binding.baseUrl, binding.accessToken).sync).replaceFromServer() }
-                            bindingStore.save(binding)
-                            activeBinding = binding
-                            showBinding = false
                         } catch (error: Exception) {
                             screen = BindingScreenState.Failed(error.message ?: "请检查手机网络以及服务器状态。")
                         }
