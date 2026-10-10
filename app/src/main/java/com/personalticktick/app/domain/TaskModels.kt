@@ -28,7 +28,8 @@ data class Task(
     val isProjection: Boolean = false,
     val syncState: SyncState = SyncState.SYNCED,
     val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
+    val updatedAt: LocalDateTime,
+    val completedAt: LocalDateTime? = null
 )
 
 data class ParsedDateTime(

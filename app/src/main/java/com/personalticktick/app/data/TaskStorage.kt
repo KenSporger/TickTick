@@ -2,6 +2,8 @@ package com.personalticktick.app.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.google.gson.annotations.SerializedName
 import com.personalticktick.app.domain.*
 import kotlinx.coroutines.flow.Flow
@@ -39,14 +41,15 @@ data class TaskEntity(
     val isProjection: Boolean,
     val syncState: String,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val completedAt: String?
 )
 
 fun Task.toEntity(state: SyncState = syncState) = TaskEntity(
     id, seriesId, title, startDate?.toString(), endDate?.toString(), time?.toString(),
     reminderAt?.toString(), repeatRule.kind.name, repeatRule.weekdays.sorted().joinToString(","),
     repeatRule.monthDay, repeatRule.totalCount, repeatRule.occurrenceIndex, status.name,
-    isProjection, state.name, createdAt.toString(), updatedAt.toString()
+    isProjection, state.name, createdAt.toString(), updatedAt.toString(), completedAt?.toString()
 )
 
 fun TaskEntity.toDomain() = Task(
@@ -55,7 +58,7 @@ fun TaskEntity.toDomain() = Task(
     RepeatRule(RepeatKind.valueOf(repeatKind), repeatWeekdays.split(',').mapNotNull(String::toIntOrNull).toSet(),
         repeatMonthDay, repeatTotalCount, repeatOccurrenceIndex),
     TaskStatus.valueOf(status), isProjection, SyncState.valueOf(syncState),
-    LocalDateTime.parse(createdAt), LocalDateTime.parse(updatedAt)
+    LocalDateTime.parse(createdAt), LocalDateTime.parse(updatedAt), completedAt?.let(LocalDateTime::parse)
 )
 
 @Dao
@@ -95,7 +98,7 @@ interface TaskDao {
     suspend fun futureSeries(seriesId: String, startDate: String): List<TaskEntity>
 }
 
-@Database(entities = [TaskEntity::class], version = 1, exportSchema = false)
+@Database(entities = [TaskEntity::class], version = 2, exportSchema = false)
 abstract class TaskDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
 
@@ -103,7 +106,13 @@ abstract class TaskDatabase : RoomDatabase() {
         @Volatile private var instance: TaskDatabase? = null
         fun get(context: Context): TaskDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, TaskDatabase::class.java, "tasks.db")
+                .addMigrations(MIGRATION_1_2)
                 .build().also { instance = it }
+        }
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tasks ADD COLUMN completedAt TEXT")
+            }
         }
     }
 }
@@ -126,6 +135,7 @@ data class TaskDto(
     @SerializedName("repeat_rule") val repeatRule: RepeatRuleDto = RepeatRuleDto(),
     val status: String = "ACTIVE",
     @SerializedName("is_projection") val isProjection: Boolean = false,
+    @SerializedName("completed_at") val completedAt: String? = null,
     @SerializedName("updated_at") val updatedAt: String
 )
 
@@ -140,14 +150,14 @@ fun interface SyncApi {
 fun Task.toDto() = TaskDto(id, seriesId, title, startDate?.toString(), endDate?.toString(),
     time?.toString(), reminderAt?.toString(), RepeatRuleDto(repeatRule.kind.name,
         repeatRule.weekdays.sorted(), repeatRule.monthDay, repeatRule.totalCount, repeatRule.occurrenceIndex),
-    status.name, isProjection, updatedAt.toWireTimestamp())
+    status.name, isProjection, completedAt?.toWireTimestamp(), updatedAt.toWireTimestamp())
 
 fun TaskDto.toDomain(createdAt: LocalDateTime = parseWireTimestamp(updatedAt)) = Task(
     id, seriesId, title, startDate?.let(LocalDate::parse), endDate?.let(LocalDate::parse),
     time?.let(LocalTime::parse), reminderAt?.let(LocalDateTime::parse),
     RepeatRule(RepeatKind.valueOf(repeatRule.kind), repeatRule.weekdays.toSet(), repeatRule.monthDay,
         repeatRule.totalCount, repeatRule.occurrenceIndex), TaskStatus.valueOf(status), isProjection,
-    SyncState.SYNCED, createdAt, parseWireTimestamp(updatedAt)
+    SyncState.SYNCED, createdAt, parseWireTimestamp(updatedAt), completedAt?.let(::parseWireTimestamp)
 )
 
 class RoomTaskRepository(
@@ -180,8 +190,10 @@ class RoomTaskRepository(
     }
 
     private suspend fun changeStatus(id: String, status: TaskStatus): Task? {
+        val now = LocalDateTime.now()
         val changed = dao.find(id)?.toDomain()?.copy(status = status, syncState = SyncState.PENDING,
-            updatedAt = LocalDateTime.now()) ?: return null
+            completedAt = if (status == TaskStatus.COMPLETED) now else null,
+            updatedAt = now) ?: return null
         dao.upsert(changed.toEntity())
         return changed
     }

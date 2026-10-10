@@ -31,6 +31,7 @@ def task(task_id: str, title: str, **overrides):
         },
         "status": "ACTIVE",
         "is_projection": False,
+        "completed_at": None,
         "updated_at": "2026-10-02T08:00:00Z",
     }
     payload.update(overrides)
@@ -63,6 +64,7 @@ def test_crud_round_trip_all_task_shapes(client):
     assert client.put("/api/tasks/timed", json=changed).json() == changed
 
     completed = {**all_day, "status": "COMPLETED", "updated_at": "2026-10-03T12:00:00Z"}
+    completed["completed_at"] = "2026-10-03T12:00:00Z"
     assert client.put("/api/tasks/all-day", json=completed).json()["status"] == "COMPLETED"
     deleted = client.delete("/api/tasks/timed")
     assert deleted.status_code == 200

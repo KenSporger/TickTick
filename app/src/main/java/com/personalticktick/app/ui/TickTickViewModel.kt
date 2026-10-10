@@ -154,7 +154,14 @@ class TickTickViewModel(private val gateway: TaskUiGateway? = null) : ViewModel(
         gateway?.let { target -> viewModelScope.launch { if (completing) target.complete(id) else target.restore(id) } }
         state.copy(
             tasks = state.tasks.map {
-                if (it.id == id) it.copy(status = if (completing) TaskStatus.COMPLETED else TaskStatus.ACTIVE, updatedAt = LocalDateTime.now()) else it
+                if (it.id == id) {
+                    val changedAt = LocalDateTime.now()
+                    it.copy(
+                        status = if (completing) TaskStatus.COMPLETED else TaskStatus.ACTIVE,
+                        completedAt = if (completing) changedAt else null,
+                        updatedAt = changedAt
+                    )
+                } else it
             },
             message = if (completing) "任务已完成" else "任务已恢复",
             lastCompletedId = if (completing) id else null

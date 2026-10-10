@@ -36,6 +36,7 @@ class DataReminderTest {
         repository.upsert(original)
         assertEquals(original.copy(syncState = SyncState.PENDING), repository.observeAll().first().single())
         assertEquals(SyncState.PENDING, repository.find(original.id)?.syncState)
+        assertNull(repository.find(original.id)?.completedAt)
     }
 
     @Test fun syncSuccessMarksLocalTruthSyncedAndFailurePreservesPendingLocalTruth() = runTest {
@@ -81,6 +82,13 @@ class DataReminderTest {
         val tombstone = database.taskDao().findIncludingDeleted("delete-me")!!.toDomain()
         assertEquals(TaskStatus.DELETED, tombstone.status)
         assertEquals(SyncState.PENDING, tombstone.syncState)
+    }
+
+    @Test fun completeSetsCompletedAtAndRestoreClearsIt() = runTest {
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { error("offline") })
+        repository.upsert(completeTask().copy(id = "completion-time"))
+        assertNotNull(repository.complete("completion-time")?.completedAt)
+        assertNull(repository.restore("completion-time")?.completedAt)
     }
 
     private fun completeTask() = Task(

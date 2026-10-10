@@ -24,6 +24,7 @@ class TaskPayload(BaseModel):
     repeat_rule: RepeatRule = Field(default_factory=RepeatRule)
     status: Literal["ACTIVE", "COMPLETED", "SKIPPED", "DELETED"] = "ACTIVE"
     is_projection: bool = False
+    completed_at: str | None = None
     updated_at: str
 
     @model_validator(mode="after")
