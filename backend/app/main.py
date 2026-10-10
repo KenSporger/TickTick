@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import fcntl
+from hashlib import sha256
+import hmac
+import json
 import os
 from pathlib import Path
 import re
+import tempfile
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
 
-from .schemas import SyncRequest, SyncResponse, TaskPayload
+from .schemas import BindConsumeRequest, SyncRequest, SyncResponse, TaskPayload
 from .store import TaskStore, parse_updated_at
 
 
@@ -55,8 +60,13 @@ def _search_keys(title: str) -> tuple[str, str]:
     return folded, initials + words
 
 
-def create_app(database_path: str | Path | None = None) -> FastAPI:
+def create_app(
+    database_path: str | Path | None = None,
+    binding_state_path: str | Path | None = None,
+) -> FastAPI:
     path = Path(database_path or os.environ.get("TICKTICK_DB_PATH", "backend/tasks.sqlite3"))
+    bind_path_value = binding_state_path or os.environ.get("TICKTICK_BINDING_STATE")
+    bind_path = Path(bind_path_value) if bind_path_value else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -68,6 +78,44 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 
     def store(request: Request) -> TaskStore:
         return request.app.state.store
+
+    @app.post("/api/bind/consume")
+    def consume_binding(payload: BindConsumeRequest):
+        if bind_path is None or not bind_path.is_file():
+            raise HTTPException(status_code=503, detail="binding is not configured")
+        lock_path = bind_path.with_suffix(bind_path.suffix + ".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                try:
+                    state = json.loads(bind_path.read_text(encoding="utf-8"))
+                    expires_at = datetime.fromisoformat(str(state["expires_at"]).replace("Z", "+00:00"))
+                    expected_hash = str(state.get("token_hash") or state["token_sha256"])
+                except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+                    raise HTTPException(status_code=503, detail="binding state is invalid") from error
+                if bool(state.get("used")):
+                    raise HTTPException(status_code=409, detail="binding token already used")
+                if expires_at <= datetime.now(timezone.utc):
+                    raise HTTPException(status_code=410, detail="binding token expired")
+                actual_hash = sha256(payload.token.encode("utf-8")).hexdigest()
+                if not hmac.compare_digest(actual_hash, expected_hash):
+                    raise HTTPException(status_code=401, detail="invalid binding token")
+                state["used"] = True
+                state["used_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                fd, temporary_name = tempfile.mkstemp(prefix=bind_path.name, dir=bind_path.parent)
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as output:
+                        json.dump(state, output, ensure_ascii=False)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    os.replace(temporary_name, bind_path)
+                finally:
+                    if os.path.exists(temporary_name):
+                        os.unlink(temporary_name)
+                return {"ok": True}
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     @app.post("/api/tasks", response_model=TaskPayload, status_code=status.HTTP_201_CREATED)
     def create_task(payload: TaskPayload, request: Request):

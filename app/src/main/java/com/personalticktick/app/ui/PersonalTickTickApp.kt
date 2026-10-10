@@ -46,6 +46,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -76,9 +78,11 @@ private val Danger = Color(0xFFE36B6B)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PersonalTickTickApp(viewModel: TickTickViewModel) {
+fun PersonalTickTickApp(viewModel: TickTickViewModel, onRebind: () -> Unit = {}) {
     val state by viewModel.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
+    var drawerOpen by remember { mutableStateOf(false) }
+    var serverPage by remember { mutableStateOf(false) }
     LaunchedEffect(state.message) {
         val message = state.message ?: return@LaunchedEffect
         val result = snackbar.showSnackbar(message, actionLabel = if (state.lastCompletedId != null) "撤销" else null)
@@ -92,7 +96,7 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel) {
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = { BottomNavigation(state.page, viewModel::navigate) },
             floatingActionButton = {
-                if (state.page != AppPage.SEARCH) Surface(
+                if (state.page != AppPage.SEARCH && state.page != AppPage.INBOX && !serverPage) Surface(
                     modifier = Modifier.size(58.dp).clickable { viewModel.create(if (state.page == AppPage.CALENDAR) state.calendarAnchor else LocalDate.now()) }
                         .semantics { contentDescription = "创建任务" },
                     shape = CircleShape, color = Primary, shadowElevation = 8.dp
@@ -100,11 +104,17 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel) {
             }
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
-                when (state.page) {
-                    AppPage.TODAY -> TodayScreen(state, viewModel)
+                if (serverPage) ServerSettings(onBack = { serverPage = false }, onRebind = onRebind)
+                else when (state.page) {
+                    AppPage.TODAY -> TodayScreen(state, viewModel) { drawerOpen = true }
                     AppPage.CALENDAR -> CalendarScreen(state, viewModel)
                     AppPage.SEARCH -> SearchScreen(state, viewModel)
+                    AppPage.INBOX -> InboxScreen()
                 }
+                if (drawerOpen) NavigationDrawer(
+                    onDismiss = { drawerOpen = false },
+                    onServer = { drawerOpen = false; serverPage = true }
+                )
             }
         }
         state.editor?.let { TaskEditorSheet(it, viewModel) }
@@ -119,7 +129,7 @@ private fun BottomNavigation(page: AppPage, navigate: (AppPage) -> Unit) {
         NavItem("✓", "任务", page == AppPage.TODAY) { navigate(AppPage.TODAY) }
         NavItem("▦", "日历", page == AppPage.CALENDAR) { navigate(AppPage.CALENDAR) }
         NavItem("⌕", "搜索", page == AppPage.SEARCH) { navigate(AppPage.SEARCH) }
-        NavItem("◇", "我的", false) { }
+        NavItem("◇", "收集箱", page == AppPage.INBOX) { navigate(AppPage.INBOX) }
     }
 }
 
@@ -131,13 +141,13 @@ private fun BottomNavigation(page: AppPage, navigate: (AppPage) -> Unit) {
 }
 
 @Composable
-private fun TodayScreen(state: AppUiState, vm: TickTickViewModel) {
+private fun TodayScreen(state: AppUiState, vm: TickTickViewModel, openDrawer: () -> Unit) {
     val today = LocalDate.now()
     val overdue = state.tasks.filter { it.status == TaskStatus.ACTIVE && it.endDate?.isBefore(today) == true }
     val todayTasks = state.tasks.filter { task -> task.startDate?.let { !it.isAfter(today) } == true && task.endDate?.let { !it.isBefore(today) } == true }
         .sortedBy { it.status == TaskStatus.COMPLETED }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp)) {
-        Header("今天")
+        Header("今天", openDrawer)
         Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             Tab("已过期${if (overdue.isNotEmpty()) " ${overdue.size}" else ""}", state.todayMode == TodayMode.OVERDUE) { vm.setTodayMode(TodayMode.OVERDUE) }
             Tab("今天", state.todayMode == TodayMode.TODAY) { vm.setTodayMode(TodayMode.TODAY) }
@@ -157,11 +167,49 @@ private fun TodayScreen(state: AppUiState, vm: TickTickViewModel) {
     }
 }
 
-@Composable private fun Header(title: String) {
+@Composable private fun Header(title: String, openDrawer: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(62.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("☰", fontSize = 23.sp, color = TextMuted)
+        Text("☰", Modifier.clickable(onClick = openDrawer).padding(8.dp).semantics { contentDescription = "打开导航" }, fontSize = 23.sp, color = TextMuted)
         Text(title, Modifier.padding(start = 22.dp).weight(1f), fontSize = 23.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
         Text("◇   ⋮", color = TextMuted, fontSize = 21.sp)
+    }
+}
+
+@Composable private fun NavigationDrawer(onDismiss: () -> Unit, onServer: () -> Unit) {
+    Row(Modifier.fillMaxSize()) {
+        Surface(Modifier.fillMaxHeight().fillMaxWidth(0.74f), color = Elevated, shadowElevation = 12.dp) {
+            Column(Modifier.statusBarsPadding().padding(24.dp)) {
+                Text("✓  滴答清单", color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 18.dp))
+                Text("服务器", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onServer).padding(vertical = 18.dp).semantics { contentDescription = "服务器" })
+                Text("关于", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable { }.padding(vertical = 18.dp).semantics { contentDescription = "关于" })
+            }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable(onClick = onDismiss))
+    }
+}
+
+@Composable private fun ServerSettings(onBack: () -> Unit, onRebind: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", Modifier.clickable(onClick = onBack).padding(8.dp), color = TextMain, fontSize = 30.sp)
+            Text("服务器", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(32.dp))
+        Text("状态                       ● 已连接", color = TextMain)
+        Spacer(Modifier.height(18.dp))
+        Text("服务器                     已绑定", color = TextMuted)
+        Spacer(Modifier.height(18.dp))
+        Text("上次同步                       刚刚", color = TextMuted)
+        Spacer(Modifier.height(36.dp))
+        Button(onClick = onRebind, modifier = Modifier.fillMaxWidth()) { Text("重新绑定服务器") }
+    }
+}
+
+@Composable private fun InboxScreen() {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+        Text("收集箱", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(36.dp))
+        EmptyState("收集箱为空", "稍后处理的任务会显示在这里")
     }
 }
 

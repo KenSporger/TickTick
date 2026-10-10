@@ -1,0 +1,30 @@
+name: Release artifacts
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Build release contract
+        run: |
+          chmod +x gradlew backend/run.sh scripts/package-release.sh
+          scripts/package-release.sh "${GITHUB_REF_NAME#v}" dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/release-manifest.json
+            dist/*.tar.gz
+            dist/*.apk

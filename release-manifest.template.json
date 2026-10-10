@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "version": "__VERSION__",
+  "backend": {"file": "__BACKEND_NAME__", "sha256": "__BACKEND_SHA__"},
+  "apk": {"file": "__APK_NAME__", "sha256": "__APK_SHA__"}
+}

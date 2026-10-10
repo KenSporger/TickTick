@@ -81,6 +81,16 @@ interface TaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(tasks: List<TaskEntity>)
 
+    @Query("DELETE FROM tasks")
+    suspend fun deleteAll()
+
+    /** A server bootstrap is all-or-nothing: local rows never survive a successful rebind. */
+    @Transaction
+    suspend fun replaceAllFromServer(tasks: List<TaskEntity>) {
+        deleteAll()
+        upsertAll(tasks)
+    }
+
     @Query("SELECT * FROM tasks WHERE seriesId = :seriesId AND (startDate IS NULL OR startDate >= :startDate)")
     suspend fun futureSeries(seriesId: String, startDate: String): List<TaskEntity>
 }

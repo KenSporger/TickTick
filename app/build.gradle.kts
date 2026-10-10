@@ -17,7 +17,8 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8200/\"")
+        val configuredApiBaseUrl = providers.gradleProperty("ticktickApiBaseUrl").orElse("").get()
+        buildConfigField("String", "API_BASE_URL", "\"${configuredApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     buildTypes {
@@ -62,6 +63,8 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.code.gson:gson:2.12.1")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.3")
     implementation("com.belerweb:pinyin4j:2.5.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 

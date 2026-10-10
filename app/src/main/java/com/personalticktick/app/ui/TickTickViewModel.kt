@@ -16,7 +16,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.UUID
 
-enum class AppPage { TODAY, CALENDAR, SEARCH }
+enum class AppPage { TODAY, CALENDAR, SEARCH, INBOX }
 enum class CalendarMode { WEEK, MONTH }
 enum class TodayMode { OVERDUE, TODAY }
 enum class EditorPanel { NONE, DATE, REMINDER, REPEAT }

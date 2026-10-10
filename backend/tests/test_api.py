@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from hashlib import sha256
+import json
 import pytest
 
 from backend.app.main import create_app
@@ -103,3 +105,30 @@ def test_invalid_date_range_is_rejected(client):
     assert client.get(
         "/api/tasks", params={"start_date": "2026-10-03", "end_date": "2026-10-02"}
     ).status_code == 422
+
+
+def test_binding_token_is_consumed_once_and_expired_or_wrong_tokens_are_rejected(tmp_path):
+    state_path = tmp_path / "binding.json"
+    state_path.write_text(json.dumps({
+        "token_hash": sha256(b"one-time-secret").hexdigest(),
+        "expires_at": "2099-01-01T00:00:00Z",
+        "used": False,
+    }), encoding="utf-8")
+    with TestClient(create_app(tmp_path / "tasks.sqlite3", binding_state_path=state_path)) as bound_client:
+        wrong = bound_client.post("/api/bind/consume", json={"token": "wrong"})
+        assert wrong.status_code == 401
+        assert state_path.read_text(encoding="utf-8").find('"used": true') == -1
+
+        accepted = bound_client.post("/api/bind/consume", json={"token": "one-time-secret"})
+        assert accepted.status_code == 200
+        assert accepted.json() == {"ok": True}
+        assert json.loads(state_path.read_text(encoding="utf-8"))["used"] is True
+        assert bound_client.post("/api/bind/consume", json={"token": "one-time-secret"}).status_code == 409
+
+    state_path.write_text(json.dumps({
+        "token_hash": sha256(b"expired").hexdigest(),
+        "expires_at": "2020-01-01T00:00:00Z",
+        "used": False,
+    }), encoding="utf-8")
+    with TestClient(create_app(tmp_path / "expired.sqlite3", binding_state_path=state_path)) as expired_client:
+        assert expired_client.post("/api/bind/consume", json={"token": "expired"}).status_code == 410
