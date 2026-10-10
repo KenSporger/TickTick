@@ -1,6 +1,7 @@
 package com.personalticktick.app.ui
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.personalticktick.app.domain.RepeatKind
 import com.personalticktick.app.domain.RepeatRule
 import com.personalticktick.app.domain.SyncState
@@ -11,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -53,16 +56,23 @@ data class AppUiState(
 
 /** Boundary used by the later Room/network integration without coupling composables to storage. */
 interface TaskUiGateway {
+    fun observeAll(): Flow<List<Task>>
     suspend fun save(task: Task)
     suspend fun complete(id: String)
     suspend fun restore(id: String)
     suspend fun delete(id: String, futureSeries: Boolean)
 }
 
-class TickTickViewModel : ViewModel() {
+class TickTickViewModel(private val gateway: TaskUiGateway? = null) : ViewModel() {
     private val now = LocalDateTime.now()
-    private val _state = MutableStateFlow(AppUiState(tasks = demoTasks(now)))
+    private val _state = MutableStateFlow(AppUiState(tasks = if (gateway == null) demoTasks(now) else emptyList()))
     val state: StateFlow<AppUiState> = _state.asStateFlow()
+
+    init {
+        gateway?.let { source ->
+            viewModelScope.launch { source.observeAll().collect { tasks -> _state.update { it.copy(tasks = tasks) } } }
+        }
+    }
 
     fun navigate(page: AppPage) = _state.update { it.copy(page = page, message = null) }
     fun setTodayMode(mode: TodayMode) = _state.update { it.copy(todayMode = mode) }
@@ -130,6 +140,7 @@ class TickTickViewModel : ViewModel() {
             createdAt = old?.createdAt ?: stamp,
             updatedAt = stamp
         )
+        gateway?.let { target -> viewModelScope.launch { target.save(task) } }
         return state.copy(
             tasks = state.tasks.filterNot { it.id == task.id } + task,
             editor = null,
@@ -140,6 +151,7 @@ class TickTickViewModel : ViewModel() {
     fun toggleComplete(id: String) = _state.update { state ->
         val task = state.tasks.firstOrNull { it.id == id } ?: return@update state
         val completing = task.status != TaskStatus.COMPLETED
+        gateway?.let { target -> viewModelScope.launch { if (completing) target.complete(id) else target.restore(id) } }
         state.copy(
             tasks = state.tasks.map {
                 if (it.id == id) it.copy(status = if (completing) TaskStatus.COMPLETED else TaskStatus.ACTIVE, updatedAt = LocalDateTime.now()) else it
@@ -164,6 +176,7 @@ class TickTickViewModel : ViewModel() {
     private fun deleteEditor(future: Boolean, state: AppUiState): AppUiState {
         val id = state.editor?.editingId ?: return state
         val current = state.tasks.firstOrNull { it.id == id }
+        gateway?.let { target -> viewModelScope.launch { target.delete(id, future) } }
         val filtered = if (future && current?.seriesId != null) state.tasks.filterNot { it.seriesId == current.seriesId && (it.startDate ?: LocalDate.MIN) >= (current.startDate ?: LocalDate.MIN) }
         else state.tasks.filterNot { it.id == id }
         return state.copy(tasks = filtered, editor = null, deleteScopePrompt = false, message = "任务已删除")

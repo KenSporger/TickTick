@@ -10,8 +10,10 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import secrets
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from .schemas import BindConsumeRequest, SyncRequest, SyncResponse, TaskPayload
 from .store import TaskStore, parse_updated_at
@@ -76,6 +78,21 @@ def create_app(
 
     app = FastAPI(title="TickTick personal API", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def require_api_token(request: Request, call_next):
+        if request.url.path.startswith("/api/") and request.url.path != "/api/bind/consume":
+            if bind_path is None or not bind_path.is_file():
+                return JSONResponse(status_code=503, content={"detail": "API token is not configured"})
+            try:
+                state = json.loads(bind_path.read_text(encoding="utf-8"))
+                expected = str(state["api_token"])
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+                return JSONResponse(status_code=503, content={"detail": "API token is not configured"})
+            supplied = request.headers.get("Authorization", "")
+            if not supplied.startswith("Bearer ") or not hmac.compare_digest(supplied[7:], expected):
+                return JSONResponse(status_code=401, content={"detail": "invalid API token"})
+        return await call_next(request)
+
     def store(request: Request) -> TaskStore:
         return request.app.state.store
 
@@ -103,6 +120,7 @@ def create_app(
                     raise HTTPException(status_code=401, detail="invalid binding token")
                 state["used"] = True
                 state["used_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                state.setdefault("api_token", secrets.token_urlsafe(32))
                 fd, temporary_name = tempfile.mkstemp(prefix=bind_path.name, dir=bind_path.parent)
                 try:
                     with os.fdopen(fd, "w", encoding="utf-8") as output:
@@ -113,7 +131,7 @@ def create_app(
                 finally:
                     if os.path.exists(temporary_name):
                         os.unlink(temporary_name)
-                return {"ok": True}
+                return {"ok": True, "access_token": state["api_token"]}
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 

@@ -14,10 +14,11 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
+import okhttp3.OkHttpClient
 import java.net.URI
 import java.time.Instant
 
-data class ServerBinding(val baseUrl: String)
+data class ServerBinding(val baseUrl: String, val accessToken: String = "")
 
 data class BindingPayload(
     val version: Int,
@@ -59,12 +60,16 @@ object StartupPolicy {
 
 class BindingStore(context: Context) {
     private val preferences = context.getSharedPreferences("server_binding", Context.MODE_PRIVATE)
-    fun read(): ServerBinding? = preferences.getString("base_url", null)?.let(::ServerBinding)
-    fun save(binding: ServerBinding) { preferences.edit().putString("base_url", binding.baseUrl).apply() }
+    fun read(): ServerBinding? = preferences.getString("base_url", null)?.let {
+        ServerBinding(it, preferences.getString("access_token", "").orEmpty())
+    }
+    fun save(binding: ServerBinding) {
+        preferences.edit().putString("base_url", binding.baseUrl).putString("access_token", binding.accessToken).apply()
+    }
 }
 
 data class ConsumeBindingRequest(val token: String)
-data class ConsumeBindingResponse(val ok: Boolean)
+data class ConsumeBindingResponse(val ok: Boolean, @SerializedName("access_token") val accessToken: String)
 
 interface BindingApi {
     @POST("api/bind/consume")
@@ -74,9 +79,15 @@ interface BindingApi {
 data class ServerApis(val binding: BindingApi, val sync: SyncApi)
 
 object ServerApiFactory {
-    fun create(baseUrl: String): ServerApis {
+    fun create(baseUrl: String, accessToken: String = ""): ServerApis {
+        val client = OkHttpClient.Builder().apply {
+            if (accessToken.isNotBlank()) addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().header("Authorization", "Bearer $accessToken").build())
+            }
+        }.build()
         val retrofit = Retrofit.Builder()
             .baseUrl(baseUrl)
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
         return ServerApis(retrofit.create(BindingApi::class.java), retrofit.create(SyncApi::class.java))
@@ -86,13 +97,13 @@ object ServerApiFactory {
 class BindingCoordinator(
     private val database: TaskDatabase,
     private val store: BindingStore,
-    private val apiFactory: (String) -> ServerApis = ServerApiFactory::create
+    private val apiFactory: (String) -> ServerApis = { ServerApiFactory.create(it) }
 ) {
     suspend fun bind(payload: BindingPayload): Int {
-        val apis = apiFactory(payload.baseUrl)
-        check(apis.binding.consume(ConsumeBindingRequest(payload.token)).ok) { "binding rejected" }
-        val count = ServerBootstrapper(database, apis.sync).replaceFromServer()
-        store.save(ServerBinding(payload.baseUrl))
+        val exchange = apiFactory(payload.baseUrl).binding.consume(ConsumeBindingRequest(payload.token))
+        check(exchange.ok) { "binding rejected" }
+        val count = ServerBootstrapper(database, ServerApiFactory.create(payload.baseUrl, exchange.accessToken).sync).replaceFromServer()
+        store.save(ServerBinding(payload.baseUrl, exchange.accessToken))
         return count
     }
 }

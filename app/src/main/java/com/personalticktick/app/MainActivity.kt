@@ -6,10 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.personalticktick.app.binding.*
 import com.personalticktick.app.ui.PersonalTickTickApp
 import com.personalticktick.app.ui.TickTickViewModel
+import com.personalticktick.app.ui.RepositoryUiGateway
+import com.personalticktick.app.data.RoomTaskRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,7 +28,7 @@ class MainActivity : ComponentActivity() {
             var activeBinding by remember {
                 mutableStateOf(
                     BuildConfig.API_BASE_URL.takeIf { it.isNotBlank() }
-                        ?.let { ServerBinding(it.trimEnd('/') + "/") }
+                        ?.let { ServerBinding(it.trimEnd('/') + "/", BuildConfig.API_TOKEN) }
                         ?: bindingStore.read()
                 )
             }
@@ -38,21 +42,22 @@ class MainActivity : ComponentActivity() {
                 } catch (_: InvalidBindingCode) {
                     screen = BindingScreenState.Failed("这不是有效的服务器绑定码"); return
                 }
-                var tokenConsumed = false
+                var sessionToken: String? = null
                 val action: () -> Unit = action@{
                     if (screen == BindingScreenState.Connecting || screen == BindingScreenState.Syncing) return@action
                     screen = BindingScreenState.Connecting
                     lifecycleScope.launch {
                         try {
-                            val apis = withContext(Dispatchers.IO) { ServerApiFactory.create(payload.baseUrl) }
-                            if (!tokenConsumed) withContext(Dispatchers.IO) {
-                                check(apis.binding.consume(ConsumeBindingRequest(payload.token)).ok)
-                                tokenConsumed = true
+                            if (sessionToken == null) withContext(Dispatchers.IO) {
+                                val exchange = ServerApiFactory.create(payload.baseUrl).binding.consume(ConsumeBindingRequest(payload.token))
+                                check(exchange.ok)
+                                sessionToken = exchange.accessToken
                             }
                             screen = BindingScreenState.Syncing
-                            withContext(Dispatchers.IO) { ServerBootstrapper(database, apis.sync).replaceFromServer() }
-                            bindingStore.save(ServerBinding(payload.baseUrl))
-                            activeBinding = ServerBinding(payload.baseUrl)
+                            val binding = ServerBinding(payload.baseUrl, checkNotNull(sessionToken))
+                            withContext(Dispatchers.IO) { ServerBootstrapper(database, ServerApiFactory.create(binding.baseUrl, binding.accessToken).sync).replaceFromServer() }
+                            bindingStore.save(binding)
+                            activeBinding = binding
                             showBinding = false
                         } catch (error: Exception) {
                             screen = BindingScreenState.Failed(error.message ?: "请检查手机网络以及服务器状态。")
@@ -66,7 +71,15 @@ class MainActivity : ComponentActivity() {
             if (showBinding) {
                 ServerBindingApp(screen, ::bind, { retryAction?.invoke() }, { screen = BindingScreenState.Welcome })
             } else {
-                PersonalTickTickApp(viewModel<TickTickViewModel>(), onRebind = {
+                val binding = checkNotNull(activeBinding)
+                val factory = remember(binding) { object : ViewModelProvider.Factory {
+                    @Suppress("UNCHECKED_CAST")
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        val repository = RoomTaskRepository(database.taskDao(), ServerApiFactory.create(binding.baseUrl, binding.accessToken).sync)
+                        return TickTickViewModel(RepositoryUiGateway(repository)) as T
+                    }
+                } }
+                PersonalTickTickApp(viewModel<TickTickViewModel>(key = binding.baseUrl, factory = factory), onRebind = {
                     screen = BindingScreenState.Welcome
                     retryAction = null
                     showBinding = true

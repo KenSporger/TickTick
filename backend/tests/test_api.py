@@ -10,7 +10,9 @@ from backend.app.main import create_app
 
 @pytest.fixture
 def client(tmp_path):
-    with TestClient(create_app(tmp_path / "tasks.sqlite3")) as test_client:
+    state_path = tmp_path / "binding.json"
+    state_path.write_text(json.dumps({"api_token": "test-api-token"}), encoding="utf-8")
+    with TestClient(create_app(tmp_path / "tasks.sqlite3", binding_state_path=state_path), headers={"Authorization": "Bearer test-api-token"}) as test_client:
         yield test_client
 
 
@@ -36,6 +38,7 @@ def task(task_id: str, title: str, **overrides):
 
 
 def test_crud_round_trip_all_task_shapes(client):
+    assert client.get("/api/tasks", headers={"Authorization": ""}).status_code == 401
     all_day = task("all-day", "明天交材料", start_date="2026-10-03", end_date="2026-10-03")
     timed = task(
         "timed", "下午开会", time="15:30", reminder_at="2026-10-02T15:30:00+08:00",
@@ -121,7 +124,8 @@ def test_binding_token_is_consumed_once_and_expired_or_wrong_tokens_are_rejected
 
         accepted = bound_client.post("/api/bind/consume", json={"token": "one-time-secret"})
         assert accepted.status_code == 200
-        assert accepted.json() == {"ok": True}
+        assert accepted.json()["ok"] is True
+        assert len(accepted.json()["access_token"]) >= 32
         assert json.loads(state_path.read_text(encoding="utf-8"))["used"] is True
         assert bound_client.post("/api/bind/consume", json={"token": "one-time-secret"}).status_code == 409
 

@@ -13,18 +13,32 @@ android {
         applicationId = "com.personalticktick.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         val configuredApiBaseUrl = providers.gradleProperty("ticktickApiBaseUrl").orElse("").get()
+        val configuredApiToken = providers.gradleProperty("ticktickApiToken").orElse("").get()
         buildConfigField("String", "API_BASE_URL", "\"${configuredApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "API_TOKEN", "\"${configuredApiToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
+    signingConfigs {
+        create("production") {
+            val keystorePath = System.getenv("TICKTICK_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("TICKTICK_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("TICKTICK_KEY_ALIAS")
+                keyPassword = System.getenv("TICKTICK_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         debug { isMinifyEnabled = false }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("production")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -62,6 +76,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.12.1")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")

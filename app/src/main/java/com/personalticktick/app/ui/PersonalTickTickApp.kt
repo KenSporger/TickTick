@@ -83,6 +83,7 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel, onRebind: () -> Unit = {})
     val snackbar = remember { SnackbarHostState() }
     var drawerOpen by remember { mutableStateOf(false) }
     var serverPage by remember { mutableStateOf(false) }
+    var aboutPage by remember { mutableStateOf(false) }
     LaunchedEffect(state.message) {
         val message = state.message ?: return@LaunchedEffect
         val result = snackbar.showSnackbar(message, actionLabel = if (state.lastCompletedId != null) "撤销" else null)
@@ -105,6 +106,7 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel, onRebind: () -> Unit = {})
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 if (serverPage) ServerSettings(onBack = { serverPage = false }, onRebind = onRebind)
+                else if (aboutPage) AboutScreen { aboutPage = false }
                 else when (state.page) {
                     AppPage.TODAY -> TodayScreen(state, viewModel) { drawerOpen = true }
                     AppPage.CALENDAR -> CalendarScreen(state, viewModel)
@@ -113,7 +115,8 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel, onRebind: () -> Unit = {})
                 }
                 if (drawerOpen) NavigationDrawer(
                     onDismiss = { drawerOpen = false },
-                    onServer = { drawerOpen = false; serverPage = true }
+                    onServer = { drawerOpen = false; serverPage = true },
+                    onAbout = { drawerOpen = false; aboutPage = true }
                 )
             }
         }
@@ -175,16 +178,29 @@ private fun TodayScreen(state: AppUiState, vm: TickTickViewModel, openDrawer: ()
     }
 }
 
-@Composable private fun NavigationDrawer(onDismiss: () -> Unit, onServer: () -> Unit) {
+@Composable private fun NavigationDrawer(onDismiss: () -> Unit, onServer: () -> Unit, onAbout: () -> Unit) {
     Row(Modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxHeight().fillMaxWidth(0.74f), color = Elevated, shadowElevation = 12.dp) {
             Column(Modifier.statusBarsPadding().padding(24.dp)) {
                 Text("✓  滴答清单", color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 18.dp))
                 Text("服务器", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onServer).padding(vertical = 18.dp).semantics { contentDescription = "服务器" })
-                Text("关于", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable { }.padding(vertical = 18.dp).semantics { contentDescription = "关于" })
+                Text("关于", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onAbout).padding(vertical = 18.dp).semantics { contentDescription = "关于" })
             }
         }
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable(onClick = onDismiss))
+    }
+}
+
+@Composable private fun AboutScreen(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", Modifier.clickable(onClick = onBack).padding(8.dp), color = TextMain, fontSize = 30.sp)
+            Text("关于", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(42.dp))
+        Text("滴答清单", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        Text("版本 1.1.0", color = TextMuted)
     }
 }
 

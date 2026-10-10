@@ -19,8 +19,15 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - name: Build release contract
+        env:
+          TICKTICK_KEYSTORE_B64: ${{ secrets.TICKTICK_KEYSTORE_B64 }}
+          TICKTICK_KEYSTORE_PASSWORD: ${{ secrets.TICKTICK_KEYSTORE_PASSWORD }}
+          TICKTICK_KEY_ALIAS: ${{ secrets.TICKTICK_KEY_ALIAS }}
+          TICKTICK_KEY_PASSWORD: ${{ secrets.TICKTICK_KEY_PASSWORD }}
         run: |
           chmod +x gradlew backend/run.sh scripts/package-release.sh
+          echo "$TICKTICK_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/ticktick-release.jks"
+          export TICKTICK_KEYSTORE_PATH="$RUNNER_TEMP/ticktick-release.jks"
           scripts/package-release.sh "${GITHUB_REF_NAME#v}" dist
       - uses: softprops/action-gh-release@v2
         with:
