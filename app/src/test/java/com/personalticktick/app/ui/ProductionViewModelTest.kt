@@ -22,6 +22,7 @@ class ProductionViewModelTest {
         val gateway = FakeProductionGateway(listOf(remote))
         val viewModel = TickTickViewModel(gateway)
         advanceUntilIdle()
+        assertEquals(1, gateway.refreshCount)
         assertEquals(listOf("server-task"), viewModel.state.value.tasks.map { it.id })
 
         viewModel.toggleComplete("server-task")
@@ -33,6 +34,8 @@ class ProductionViewModelTest {
 private class FakeProductionGateway(initial: List<Task>) : TaskUiGateway {
     private var tasks = initial
     val completed = mutableListOf<String>()
+    var refreshCount = 0
+    override suspend fun refresh() { refreshCount++ }
     override fun observeAll() = flowOf(tasks)
     override suspend fun save(task: Task) { tasks = tasks.filterNot { it.id == task.id } + task }
     override suspend fun complete(id: String) { completed += id }

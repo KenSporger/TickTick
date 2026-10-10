@@ -57,6 +57,7 @@ data class AppUiState(
 /** Boundary used by the later Room/network integration without coupling composables to storage. */
 interface TaskUiGateway {
     fun observeAll(): Flow<List<Task>>
+    suspend fun refresh()
     suspend fun save(task: Task)
     suspend fun complete(id: String)
     suspend fun restore(id: String)
@@ -70,6 +71,7 @@ class TickTickViewModel(private val gateway: TaskUiGateway? = null) : ViewModel(
 
     init {
         gateway?.let { source ->
+            viewModelScope.launch { source.refresh() }
             viewModelScope.launch { source.observeAll().collect { tasks -> _state.update { it.copy(tasks = tasks) } } }
         }
     }

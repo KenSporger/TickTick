@@ -218,14 +218,14 @@ class RoomTaskRepository(
 
     override suspend fun syncPending(): Int {
         val pending = dao.pending()
-        if (pending.isEmpty()) return 0
         return try {
             val response = api.sync(SyncRequest(pending.map { it.toDomain().toDto() }))
             val current = dao.all().associateBy { it.id }
-            dao.upsertAll(response.tasks.map { dto ->
+            val snapshot = response.tasks.map { dto ->
                 dto.toDomain(current[dto.id]?.createdAt?.let(LocalDateTime::parse)
-                    ?: LocalDateTime.parse(dto.updatedAt)).toEntity(SyncState.SYNCED)
-            })
+                    ?: parseWireTimestamp(dto.updatedAt)).toEntity(SyncState.SYNCED)
+            }
+            dao.replaceAllFromServer(snapshot)
             pending.size
         } catch (_: Exception) { 0 }
     }

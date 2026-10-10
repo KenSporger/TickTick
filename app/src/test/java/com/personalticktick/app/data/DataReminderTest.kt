@@ -54,6 +54,18 @@ class DataReminderTest {
         assertEquals(SyncState.PENDING, failing.find("failure")?.syncState)
     }
 
+    @Test fun startupSyncWithNoPendingRowsPullsAndAppliesCompleteServerSnapshot() = runTest {
+        val remote = completeTask().copy(id = "remote-at-startup", title = "服务端已有任务").toDto()
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi { request ->
+            assertTrue(request.tasks.isEmpty())
+            SyncResponse(listOf(remote), "2026-10-11T08:00:00Z")
+        })
+
+        assertEquals(0, database.taskDao().all().size)
+        assertEquals(0, repository.syncPending())
+        assertEquals("服务端已有任务", repository.find("remote-at-startup")?.title)
+    }
+
     @Test fun permissionChannelAndExactAlarmStateMapToUserVisibleCapability() {
         assertEquals(ReminderCapability.UNAVAILABLE, ReminderPolicy.capability(false, true, true))
         assertEquals(ReminderCapability.UNAVAILABLE, ReminderPolicy.capability(true, false, true))
