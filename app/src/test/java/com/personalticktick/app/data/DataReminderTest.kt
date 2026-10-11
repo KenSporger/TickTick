@@ -66,6 +66,28 @@ class DataReminderTest {
         assertEquals("服务端已有任务", repository.find("remote-at-startup")?.title)
     }
 
+    @Test fun startupSyncAcceptsLegacyAbandonedYearlyTask() = runTest {
+        val remote = completeTask().copy(
+            id = "legacy-abandoned",
+            status = TaskStatus.ABANDONED,
+            repeatRule = RepeatRule(
+                kind = RepeatKind.YEARLY,
+                interval = 2,
+                skipHolidays = true,
+                excludedDates = setOf(LocalDate.of(2026, 10, 1)),
+                repeatUntil = LocalDate.of(2030, 12, 31)
+            )
+        ).toDto()
+        val repository = RoomTaskRepository(database.taskDao(), SyncApi {
+            SyncResponse(listOf(remote), "2026-10-11T08:00:00Z")
+        })
+
+        repository.syncPending()
+        val restored = repository.find("legacy-abandoned")!!
+        assertEquals(TaskStatus.ABANDONED, restored.status)
+        assertEquals(remote.toDomain().repeatRule, restored.repeatRule)
+    }
+
     @Test fun permissionChannelAndExactAlarmStateMapToUserVisibleCapability() {
         assertEquals(ReminderCapability.UNAVAILABLE, ReminderPolicy.capability(false, true, true))
         assertEquals(ReminderCapability.UNAVAILABLE, ReminderPolicy.capability(true, false, true))

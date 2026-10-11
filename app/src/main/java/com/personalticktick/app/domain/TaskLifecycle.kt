@@ -44,6 +44,7 @@ object TaskLifecycle {
                 val requestedDay = rule.monthDay ?: start.dayOfMonth
                 nextMonth.atDay(requestedDay.coerceIn(1, nextMonth.lengthOfMonth()))
             }
+            RepeatKind.YEARLY -> start.plusYears(rule.interval.toLong())
         }
         val dayShift = ChronoUnit.DAYS.between(start, nextStart)
         val duration = task.endDate?.let { ChronoUnit.DAYS.between(start, it) } ?: 0

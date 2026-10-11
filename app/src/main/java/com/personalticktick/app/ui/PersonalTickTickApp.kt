@@ -451,4 +451,4 @@ private fun dateSummary(editor: EditorState): String = when {
     editor.time == null -> editor.startDate.format(DateTimeFormatter.ofPattern("M月d日 全天"))
     else -> "${editor.startDate.format(DateTimeFormatter.ofPattern("M月d日"))} ${editor.time.format(DateTimeFormatter.ofPattern("HH:mm"))}"
 }
-private fun repeatName(kind: RepeatKind) = when (kind) { RepeatKind.NONE -> "不重复"; RepeatKind.DAILY -> "每天"; RepeatKind.WEEKDAYS -> "工作日"; RepeatKind.WEEKLY -> "每周指定星期"; RepeatKind.MONTHLY -> "每月指定日期" }
+private fun repeatName(kind: RepeatKind) = when (kind) { RepeatKind.NONE -> "不重复"; RepeatKind.DAILY -> "每天"; RepeatKind.WEEKDAYS -> "工作日"; RepeatKind.WEEKLY -> "每周指定星期"; RepeatKind.MONTHLY -> "每月指定日期"; RepeatKind.YEARLY -> "每年" }

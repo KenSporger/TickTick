@@ -28,6 +28,8 @@ def task(task_id: str, title: str, **overrides):
         "repeat_rule": {
             "kind": "NONE", "weekdays": [], "month_day": None,
             "total_count": None, "occurrence_index": 1,
+            "interval": 1, "skip_holidays": False,
+            "excluded_dates": [], "repeat_until": None,
         },
         "status": "ACTIVE",
         "is_projection": False,
@@ -46,6 +48,8 @@ def test_crud_round_trip_all_task_shapes(client):
         repeat_rule={
             "kind": "WEEKLY", "weekdays": [2, 4], "month_day": None,
             "total_count": 8, "occurrence_index": 1,
+                "interval": 1, "skip_holidays": False,
+                "excluded_dates": [], "repeat_until": None,
         },
     )
     multi_day = task("multi", "持续两天的任务", start_date="2026-10-04", end_date="2026-10-05")
@@ -95,6 +99,30 @@ def test_sync_prefers_latest_updated_at_and_is_deterministic(client):
     first_order = client.post("/api/sync", json={"tasks": [duplicate_b, duplicate_a]}).json()
     first_title = next(item for item in first_order["tasks"] if item["id"] == "duplicate")["title"]
     assert first_title == "A"
+
+
+def test_sync_returns_legacy_abandoned_yearly_tasks_without_losing_repeat_fields(client):
+    legacy = task(
+        "legacy-abandoned",
+        "legacy fixture",
+        status="ABANDONED",
+        repeat_rule={
+            "kind": "YEARLY",
+            "weekdays": [],
+            "month_day": None,
+            "total_count": None,
+            "occurrence_index": 1,
+            "interval": 2,
+            "skip_holidays": True,
+            "excluded_dates": ["2026-10-01"],
+            "repeat_until": "2030-12-31",
+        },
+    )
+    response = client.post("/api/sync", json={"tasks": [legacy]})
+    assert response.status_code == 200
+    returned = response.json()["tasks"][0]
+    assert returned["status"] == "ABANDONED"
+    assert returned["repeat_rule"] == legacy["repeat_rule"]
 
 
 def test_search_supports_pinyin_initials_and_subsequence(client):

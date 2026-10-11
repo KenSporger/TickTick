@@ -3,8 +3,8 @@ package com.personalticktick.app.domain
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-enum class TaskStatus { ACTIVE, COMPLETED, SKIPPED, DELETED }
-enum class RepeatKind { NONE, DAILY, WEEKDAYS, WEEKLY, MONTHLY }
+enum class TaskStatus { ACTIVE, COMPLETED, SKIPPED, DELETED, ABANDONED }
+enum class RepeatKind { NONE, DAILY, WEEKDAYS, WEEKLY, MONTHLY, YEARLY }
 enum class SyncState { SYNCED, PENDING, FAILED }
 
 data class RepeatRule(
@@ -12,7 +12,11 @@ data class RepeatRule(
     val weekdays: Set<Int> = emptySet(),
     val monthDay: Int? = null,
     val totalCount: Int? = null,
-    val occurrenceIndex: Int = 1
+    val occurrenceIndex: Int = 1,
+    val interval: Int = 1,
+    val skipHolidays: Boolean = false,
+    val excludedDates: Set<LocalDate> = emptySet(),
+    val repeatUntil: LocalDate? = null
 )
 
 data class Task(

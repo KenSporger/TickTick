@@ -37,6 +37,10 @@ data class TaskEntity(
     val repeatMonthDay: Int?,
     val repeatTotalCount: Int?,
     val repeatOccurrenceIndex: Int,
+    val repeatInterval: Int,
+    val repeatSkipHolidays: Boolean,
+    val repeatExcludedDates: String,
+    val repeatUntil: String?,
     val status: String,
     val isProjection: Boolean,
     val syncState: String,
@@ -48,7 +52,8 @@ data class TaskEntity(
 fun Task.toEntity(state: SyncState = syncState) = TaskEntity(
     id, seriesId, title, startDate?.toString(), endDate?.toString(), time?.toString(),
     reminderAt?.toString(), repeatRule.kind.name, repeatRule.weekdays.sorted().joinToString(","),
-    repeatRule.monthDay, repeatRule.totalCount, repeatRule.occurrenceIndex, status.name,
+    repeatRule.monthDay, repeatRule.totalCount, repeatRule.occurrenceIndex, repeatRule.interval,
+    repeatRule.skipHolidays, repeatRule.excludedDates.sorted().joinToString(","), repeatRule.repeatUntil?.toString(), status.name,
     isProjection, state.name, createdAt.toString(), updatedAt.toString(), completedAt?.toString()
 )
 
@@ -56,7 +61,9 @@ fun TaskEntity.toDomain() = Task(
     id, seriesId, title, startDate?.let(LocalDate::parse), endDate?.let(LocalDate::parse),
     time?.let(LocalTime::parse), reminderAt?.let(LocalDateTime::parse),
     RepeatRule(RepeatKind.valueOf(repeatKind), repeatWeekdays.split(',').mapNotNull(String::toIntOrNull).toSet(),
-        repeatMonthDay, repeatTotalCount, repeatOccurrenceIndex),
+        repeatMonthDay, repeatTotalCount, repeatOccurrenceIndex, repeatInterval, repeatSkipHolidays,
+        repeatExcludedDates.split(',').mapNotNull { it.takeIf(String::isNotBlank)?.let(LocalDate::parse) }.toSet(),
+        repeatUntil?.let(LocalDate::parse)),
     TaskStatus.valueOf(status), isProjection, SyncState.valueOf(syncState),
     LocalDateTime.parse(createdAt), LocalDateTime.parse(updatedAt), completedAt?.let(LocalDateTime::parse)
 )
@@ -98,7 +105,7 @@ interface TaskDao {
     suspend fun futureSeries(seriesId: String, startDate: String): List<TaskEntity>
 }
 
-@Database(entities = [TaskEntity::class], version = 2, exportSchema = false)
+@Database(entities = [TaskEntity::class], version = 3, exportSchema = false)
 abstract class TaskDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
 
@@ -106,12 +113,20 @@ abstract class TaskDatabase : RoomDatabase() {
         @Volatile private var instance: TaskDatabase? = null
         fun get(context: Context): TaskDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, TaskDatabase::class.java, "tasks.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE tasks ADD COLUMN completedAt TEXT")
+            }
+        }
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatInterval INTEGER NOT NULL DEFAULT 1")
+                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatSkipHolidays INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatExcludedDates TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatUntil TEXT")
             }
         }
     }
@@ -121,7 +136,11 @@ data class RepeatRuleDto(
     val kind: String = "NONE", val weekdays: List<Int> = emptyList(),
     @SerializedName("month_day") val monthDay: Int? = null,
     @SerializedName("total_count") val totalCount: Int? = null,
-    @SerializedName("occurrence_index") val occurrenceIndex: Int = 1
+    @SerializedName("occurrence_index") val occurrenceIndex: Int = 1,
+    val interval: Int = 1,
+    @SerializedName("skip_holidays") val skipHolidays: Boolean = false,
+    @SerializedName("excluded_dates") val excludedDates: List<String> = emptyList(),
+    @SerializedName("repeat_until") val repeatUntil: String? = null
 )
 
 data class TaskDto(
@@ -149,14 +168,18 @@ fun interface SyncApi {
 
 fun Task.toDto() = TaskDto(id, seriesId, title, startDate?.toString(), endDate?.toString(),
     time?.toString(), reminderAt?.toString(), RepeatRuleDto(repeatRule.kind.name,
-        repeatRule.weekdays.sorted(), repeatRule.monthDay, repeatRule.totalCount, repeatRule.occurrenceIndex),
+        repeatRule.weekdays.sorted(), repeatRule.monthDay, repeatRule.totalCount, repeatRule.occurrenceIndex,
+        repeatRule.interval, repeatRule.skipHolidays, repeatRule.excludedDates.sorted().map(LocalDate::toString),
+        repeatRule.repeatUntil?.toString()),
     status.name, isProjection, completedAt?.toWireTimestamp(), updatedAt.toWireTimestamp())
 
 fun TaskDto.toDomain(createdAt: LocalDateTime = parseWireTimestamp(updatedAt)) = Task(
     id, seriesId, title, startDate?.let(LocalDate::parse), endDate?.let(LocalDate::parse),
     time?.let(LocalTime::parse), reminderAt?.let(LocalDateTime::parse),
     RepeatRule(RepeatKind.valueOf(repeatRule.kind), repeatRule.weekdays.toSet(), repeatRule.monthDay,
-        repeatRule.totalCount, repeatRule.occurrenceIndex), TaskStatus.valueOf(status), isProjection,
+        repeatRule.totalCount, repeatRule.occurrenceIndex, repeatRule.interval, repeatRule.skipHolidays,
+        repeatRule.excludedDates.map(LocalDate::parse).toSet(), repeatRule.repeatUntil?.let(LocalDate::parse)),
+    TaskStatus.valueOf(status), isProjection,
     SyncState.SYNCED, createdAt, parseWireTimestamp(updatedAt), completedAt?.let(::parseWireTimestamp)
 )
 
