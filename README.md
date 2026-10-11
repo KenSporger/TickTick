@@ -2,7 +2,7 @@
 
 非官方、可自托管的 Android 任务应用。界面和交互参考滴答清单 / TickTick 的今天、周、月视图，数据存在你自己的服务器上。
 
-本仓库**不提供公共服务器**。要用同步，请先自己部署 `backend/`，再把 App 指到那个地址。
+本仓库**不提供公共服务器**。要用同步，请先自己部署 `backend/`，再在 App 里扫码绑定。
 
 > 本项目与 TickTick / 滴答清单官方无关，也不是它们的产品或服务。TickTick 和滴答清单是其各自所有者的商标。
 
@@ -56,34 +56,14 @@ curl http://127.0.0.1:8200/health
 
 更完整的 Nginx、进程守护和真机联网说明见 [docs/self-host.md](docs/self-host.md)。
 
-### 2. 把 App 指到你的 API
-
-复制示例并改地址（`local.properties` 已被 git 忽略）：
-
-```bash
-cp local.properties.example local.properties
-```
-
-| 场景 | `ticktick.apiBaseUrl` |
-|---|---|
-| 模拟器访问本机 Docker / uvicorn | `http://10.0.2.2:8200/`（默认） |
-| 真机访问同一局域网电脑 | `http://192.168.x.x:8200/` |
-| 反向代理，例如 `/ticktick-api/` | `https://your.domain/ticktick-api/` |
-
-Android Studio 如果已经生成过 `local.properties`，只要补上一行 `ticktick.apiBaseUrl=...` 即可。也可以在命令行覆盖：
-
-```bash
-./gradlew assembleDebug -Pticktick.apiBaseUrl=http://192.168.1.10:8200/
-```
-
-### 3. 编译安装
+### 2. 编译安装并扫码绑定
 
 ```bash
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Release 包同样需要先写好 API 地址再编译。仓库不发布预编译 APK，避免大家连到错误的服务器。
+Debug 和 Release 都不会写死 API 地址。打开 App 后扫描服务器二维码完成绑定。
 
 ## 开发
 

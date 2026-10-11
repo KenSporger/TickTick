@@ -18,6 +18,8 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.platform.app.InstrumentationRegistry
+import com.personalticktick.app.binding.BindingStore
+import com.personalticktick.app.binding.ServerBinding
 import com.personalticktick.app.data.TaskDatabase
 import com.personalticktick.app.ui.dayHeading
 import org.junit.Rule
@@ -33,8 +35,10 @@ import java.time.temporal.TemporalAdjusters
 class ResetTaskDatabase : TestRule {
     override fun apply(base: Statement, description: Description) = object : Statement() {
         override fun evaluate() {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
             TaskDatabase.reset()
-            InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase("tasks.db")
+            context.deleteDatabase("tasks.db")
+            BindingStore(context).save(ServerBinding("http://127.0.0.1:9/", "instrumentation"))
             base.evaluate()
         }
     }

@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -54,8 +55,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,15 +112,19 @@ private fun Task.isDone() = status == TaskStatus.COMPLETED || status == TaskStat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PersonalTickTickApp(viewModel: TickTickViewModel) {
+fun PersonalTickTickApp(viewModel: TickTickViewModel, onRebind: () -> Unit = {}) {
     val state by viewModel.state.collectAsState()
+    var drawerOpen by remember { mutableStateOf(false) }
+    var serverPage by remember { mutableStateOf(false) }
+    var aboutPage by remember { mutableStateOf(false) }
+    val openDrawer = { drawerOpen = true }
     MaterialTheme(colorScheme = darkColorScheme(primary = Primary, background = Bg, surface = Card)) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = Bg,
             bottomBar = { BottomNavigation(state.page, viewModel::navigate) },
             floatingActionButton = {
-                if (state.page != AppPage.SEARCH && state.editor == null) Surface(
+                if (state.page != AppPage.SEARCH && state.editor == null && !serverPage && !aboutPage) Surface(
                     modifier = Modifier.size(56.dp).clickable {
                         viewModel.create(
                             when (state.page) {
@@ -132,12 +139,19 @@ fun PersonalTickTickApp(viewModel: TickTickViewModel) {
             }
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
-                when (state.page) {
-                    AppPage.TODAY -> TodayScreen(state, viewModel)
-                    AppPage.CALENDAR -> CalendarScreen(state, viewModel)
+                if (serverPage) ServerSettings(onBack = { serverPage = false }, onRebind = onRebind)
+                else if (aboutPage) AboutScreen { aboutPage = false }
+                else when (state.page) {
+                    AppPage.TODAY -> TodayScreen(state, viewModel, openDrawer)
+                    AppPage.CALENDAR -> CalendarScreen(state, viewModel, openDrawer)
                     AppPage.SEARCH -> SearchScreen(state, viewModel)
-                    AppPage.INBOX -> InboxScreen(state, viewModel)
+                    AppPage.INBOX -> InboxScreen(state, viewModel, openDrawer)
                 }
+                if (drawerOpen) NavigationDrawer(
+                    onDismiss = { drawerOpen = false },
+                    onServer = { drawerOpen = false; serverPage = true },
+                    onAbout = { drawerOpen = false; aboutPage = true }
+                )
             }
         }
         state.editor?.let { TaskEditorSheet(it, viewModel) }
@@ -167,12 +181,12 @@ private fun BottomNavigation(page: AppPage, navigate: (AppPage) -> Unit) {
 }
 
 @Composable
-private fun TodayScreen(state: AppUiState, vm: TickTickViewModel) {
+private fun TodayScreen(state: AppUiState, vm: TickTickViewModel, openDrawer: () -> Unit) {
     val today = LocalDate.now()
     val overdue = state.tasks.filter { TaskLifecycle.isOverdue(it, today) }
     val todayTasks = state.tasks.filter { TaskLifecycle.isVisibleOn(it, today) }.sortedBy { it.status != TaskStatus.ACTIVE }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp)) {
-        Header("今天")
+        Header("今天", openDrawer)
         Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             Tab("已过期${if (overdue.isNotEmpty()) " ${overdue.size}" else ""}", state.todayMode == TodayMode.OVERDUE) { vm.setTodayMode(TodayMode.OVERDUE) }
             Tab("今天", state.todayMode == TodayMode.TODAY) { vm.setTodayMode(TodayMode.TODAY) }
@@ -193,10 +207,10 @@ private fun TodayScreen(state: AppUiState, vm: TickTickViewModel) {
 }
 
 @Composable
-private fun InboxScreen(state: AppUiState, vm: TickTickViewModel) {
+private fun InboxScreen(state: AppUiState, vm: TickTickViewModel, openDrawer: () -> Unit) {
     val items = remember(state.tasks) { vm.visibleInboxTasks() }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp).tagged("inbox-screen")) {
-        Header("收集箱")
+        Header("收集箱", openDrawer)
         LazyColumn(Modifier.fillMaxSize()) {
             if (items.isEmpty()) item { EmptyState("收集箱是空的", "记下以后要做、现在还不排期的事") }
             items(items, key = { it.id }) { TaskCard(it, false, vm) }
@@ -204,11 +218,54 @@ private fun InboxScreen(state: AppUiState, vm: TickTickViewModel) {
     }
 }
 
-@Composable private fun Header(title: String) {
+@Composable private fun Header(title: String, openDrawer: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(62.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("☰", fontSize = 23.sp, color = TextMuted)
+        Text("☰", Modifier.clickable(onClick = openDrawer).padding(8.dp).semantics { contentDescription = "打开导航" }, fontSize = 23.sp, color = TextMuted)
         Text(title, Modifier.padding(start = 22.dp).weight(1f), fontSize = 23.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
         Text("◇   ⋮", color = TextMuted, fontSize = 21.sp)
+    }
+}
+
+@Composable private fun NavigationDrawer(onDismiss: () -> Unit, onServer: () -> Unit, onAbout: () -> Unit) {
+    Row(Modifier.fillMaxSize()) {
+        Surface(Modifier.fillMaxHeight().fillMaxWidth(0.74f), color = Elevated, shadowElevation = 12.dp) {
+            Column(Modifier.statusBarsPadding().padding(24.dp)) {
+                Text("✓  滴答清单", color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 18.dp))
+                Text("服务器", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onServer).padding(vertical = 18.dp).semantics { contentDescription = "服务器" })
+                Text("关于", color = TextMain, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onAbout).padding(vertical = 18.dp).semantics { contentDescription = "关于" })
+            }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable(onClick = onDismiss))
+    }
+}
+
+@Composable private fun AboutScreen(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", Modifier.clickable(onClick = onBack).padding(8.dp), color = TextMain, fontSize = 30.sp)
+            Text("关于", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(42.dp))
+        Text("滴答清单", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        Text("版本 1.1.0", color = TextMuted)
+    }
+}
+
+@Composable private fun ServerSettings(onBack: () -> Unit, onRebind: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", Modifier.clickable(onClick = onBack).padding(8.dp), color = TextMain, fontSize = 30.sp)
+            Text("服务器", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(32.dp))
+        Text("状态                       ● 已连接", color = TextMain)
+        Spacer(Modifier.height(18.dp))
+        Text("服务器                     已绑定", color = TextMuted)
+        Spacer(Modifier.height(18.dp))
+        Text("上次同步                       刚刚", color = TextMuted)
+        Spacer(Modifier.height(36.dp))
+        Button(onClick = onRebind, modifier = Modifier.fillMaxWidth()) { Text("重新绑定服务器") }
     }
 }
 
@@ -252,7 +309,7 @@ private fun TaskCard(task: Task, overdue: Boolean, vm: TickTickViewModel, compac
 }
 
 @Composable
-private fun CalendarScreen(state: AppUiState, vm: TickTickViewModel) {
+private fun CalendarScreen(state: AppUiState, vm: TickTickViewModel, openDrawer: () -> Unit) {
     val today = remember { LocalDate.now() }
     val baseMonday = remember { today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)) }
     val pager = rememberPagerState(initialPage = 1000, pageCount = { 2000 })
@@ -264,7 +321,7 @@ private fun CalendarScreen(state: AppUiState, vm: TickTickViewModel) {
     }
     HorizontalPager(state = pager, modifier = Modifier.fillMaxSize().tagged("month-screen"), beyondViewportPageCount = 0) { page ->
         val monday = baseMonday.plusWeeks((page - 1000).toLong())
-        MonthPage(monday, state, vm) { date ->
+        MonthPage(monday, state, vm, openDrawer) { date ->
             vm.focusDate(date)
             val target = 1000 + ChronoUnit.WEEKS.between(baseMonday, date.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))).toInt()
             scope.launch { pager.animateScrollToPage(target) }
@@ -273,11 +330,12 @@ private fun CalendarScreen(state: AppUiState, vm: TickTickViewModel) {
 }
 
 @Composable
-private fun MonthPage(monday: LocalDate, state: AppUiState, vm: TickTickViewModel, onPick: (LocalDate) -> Unit) {
+private fun MonthPage(monday: LocalDate, state: AppUiState, vm: TickTickViewModel, openDrawer: () -> Unit, onPick: (LocalDate) -> Unit) {
     val days = (0L..6L).map(monday::plusDays)
     val month = YearMonth.from(monday.plusDays(3))
     Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("☰", Modifier.clickable(onClick = openDrawer).padding(end = 8.dp).semantics { contentDescription = "打开导航" }, fontSize = 22.sp, color = TextMuted)
             Text("${month.monthValue}月", Modifier.weight(1f), color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Text("⋮", Modifier.clickable { vm.toggleShowCompleted() }.padding(8.dp), color = TextMuted, fontSize = 22.sp)
         }

@@ -93,6 +93,16 @@ interface TaskDao {
     @Query("SELECT COUNT(*) FROM tasks")
     suspend fun countAll(): Int
 
+    @Query("DELETE FROM tasks")
+    suspend fun deleteAll()
+
+    /** A server bootstrap is all-or-nothing: local rows never survive a successful rebind. */
+    @Transaction
+    suspend fun replaceAllFromServer(tasks: List<TaskEntity>) {
+        deleteAll()
+        upsertAll(tasks)
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(task: TaskEntity)
 

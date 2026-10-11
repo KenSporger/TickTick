@@ -1,0 +1,18 @@
+[Unit]
+Description=Personal TickTick API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/knowledge-backpack/shared/ticktick/current
+Environment=TICKTICK_DB_PATH=/opt/knowledge-backpack/shared/ticktick/data/tasks.sqlite3
+Environment=TICKTICK_BINDING_STATE=/opt/knowledge-backpack/shared/ticktick/state/binding.json
+Environment=TICKTICK_HOST=127.0.0.1
+Environment=TICKTICK_PORT=8200
+ExecStart=/opt/knowledge-backpack/shared/ticktick/venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8200
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

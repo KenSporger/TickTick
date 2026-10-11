@@ -4,25 +4,125 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.*
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.personalticktick.app.domain.TaskRepository
+import com.personalticktick.app.binding.*
+import com.personalticktick.app.data.RoomTaskRepository
 import com.personalticktick.app.ui.PersonalTickTickApp
 import com.personalticktick.app.ui.TickTickViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val repository = (application as TickTickApplication).repository()
-        setContent { PersonalTickTickApp(viewModel(factory = TickTickViewModelFactory(repository))) }
-    }
-}
+        val database = com.personalticktick.app.data.TaskDatabase.get(applicationContext)
+        val bindingStore = BindingStore(applicationContext)
+        setContent {
+            var activeBinding by remember {
+                mutableStateOf(
+                    BuildConfig.API_BASE_URL.takeIf { it.isNotBlank() }
+                        ?.let { ServerBinding(it.trimEnd('/') + "/", BuildConfig.API_TOKEN) }
+                        ?: bindingStore.read()
+                )
+            }
+            var pendingBinding by remember { mutableStateOf(bindingStore.readPending()) }
+            var showBinding by remember { mutableStateOf(activeBinding == null || pendingBinding != null) }
+            var screen by remember { mutableStateOf<BindingScreenState>(if (pendingBinding != null) BindingScreenState.Syncing else BindingScreenState.Welcome) }
+            var retryAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-private class TickTickViewModelFactory(private val repository: TaskRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        @Suppress("UNCHECKED_CAST")
-        return TickTickViewModel(repository) as T
+            fun bootstrap(binding: ServerBinding) {
+                lifecycleScope.launch {
+                    screen = BindingScreenState.Syncing
+                    try {
+                        withContext(Dispatchers.IO) {
+                            ServerBootstrapper(database, ServerApiFactory.create(binding.baseUrl, binding.accessToken).sync).replaceFromServer()
+                        }
+                        bindingStore.save(binding)
+                        pendingBinding = null
+                        activeBinding = binding
+                        showBinding = false
+                    } catch (error: Exception) {
+                        screen = BindingScreenState.Failed(parseServerError(error))
+                    }
+                }
+            }
+
+            LaunchedEffect(pendingBinding) {
+                pendingBinding?.let { candidate ->
+                    retryAction = { bootstrap(candidate) }
+                    bootstrap(candidate)
+                }
+            }
+
+            fun bind(raw: String) {
+                val payload = try {
+                    BindingPayload.parse(raw)
+                } catch (_: ExpiredBindingCode) {
+                    screen = BindingScreenState.Expired(); return
+                } catch (_: InvalidBindingCode) {
+                    screen = BindingScreenState.Failed("这不是有效的服务器绑定码"); return
+                }
+                var sessionToken: String? = null
+                val action: () -> Unit = action@{
+                    if (screen == BindingScreenState.Connecting || screen == BindingScreenState.Syncing) return@action
+                    screen = BindingScreenState.Connecting
+                    lifecycleScope.launch {
+                        try {
+                            if (sessionToken == null) withContext(Dispatchers.IO) {
+                                val exchange = ServerApiFactory.create(payload.baseUrl).binding.consume(ConsumeBindingRequest(payload.token))
+                                check(exchange.ok)
+                                sessionToken = exchange.accessToken
+                                val candidate = ServerBinding(payload.baseUrl, exchange.accessToken)
+                                bindingStore.savePending(candidate)
+                                pendingBinding = candidate
+                            }
+                        } catch (error: Exception) {
+                            screen = BindingScreenState.Failed(parseServerError(error))
+                        }
+                    }
+                }
+                retryAction = action
+                action()
+            }
+
+            fun rescan() {
+                bindingStore.clearPending()
+                pendingBinding = null
+                retryAction = null
+                screen = BindingScreenState.Welcome
+            }
+
+            if (showBinding) {
+                ServerBindingApp(screen, ::bind, { retryAction?.invoke() }, { screen = BindingScreenState.Welcome }, onRescan = ::rescan)
+            } else {
+                val binding = checkNotNull(activeBinding)
+                val factory = remember(binding) {
+                    object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            val repository = RoomTaskRepository(
+                                database.taskDao(),
+                                ServerApiFactory.create(binding.baseUrl, binding.accessToken).sync
+                            )
+                            return TickTickViewModel(repository) as T
+                        }
+                    }
+                }
+                PersonalTickTickApp(
+                    viewModel<TickTickViewModel>(key = binding.baseUrl, factory = factory),
+                    onRebind = {
+                        screen = BindingScreenState.Welcome
+                        retryAction = null
+                        showBinding = true
+                    }
+                )
+            }
+        }
     }
 }

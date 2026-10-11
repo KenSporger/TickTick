@@ -7,18 +7,24 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-fun Project.resolveApiBaseUrl(): String {
+fun escapeBuildConfig(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+fun Project.localTickTickProperty(name: String): String? {
     val properties = Properties()
     val localFile = rootProject.file("local.properties")
     if (localFile.exists()) {
         localFile.inputStream().use { properties.load(it) }
     }
-    val configured = (findProperty("ticktick.apiBaseUrl") as String?)
-        ?: properties.getProperty("ticktick.apiBaseUrl")
-        ?: "http://10.0.2.2:8200/"
-    val normalized = configured.trim()
-    return if (normalized.endsWith("/")) normalized else "$normalized/"
+    return (findProperty(name) as String?) ?: properties.getProperty(name)
 }
+
+fun Project.resolveApiBaseUrl(): String {
+    val configured = (findProperty("ticktick.apiBaseUrl") as String?)?.trim().orEmpty()
+    if (configured.isBlank()) return ""
+    return if (configured.endsWith("/")) configured else "$configured/"
+}
+
+fun Project.resolveApiToken(): String = localTickTickProperty("ticktick.apiToken")?.trim().orEmpty()
 
 android {
     namespace = "com.personalticktick.app"
@@ -28,17 +34,30 @@ android {
         applicationId = "com.personalticktick.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "com.personalticktick.app.TickTickTestRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
+        buildConfigField("String", "API_BASE_URL", "\"${escapeBuildConfig(resolveApiBaseUrl())}\"")
+        buildConfigField("String", "API_TOKEN", "\"${escapeBuildConfig(resolveApiToken())}\"")
     }
 
+    signingConfigs {
+        create("production") {
+            val keystorePath = System.getenv("TICKTICK_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("TICKTICK_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("TICKTICK_KEY_ALIAS")
+                keyPassword = System.getenv("TICKTICK_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         debug { isMinifyEnabled = false }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("production")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -76,7 +95,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.12.1")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.3")
     implementation("com.belerweb:pinyin4j:2.5.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 

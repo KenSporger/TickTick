@@ -45,3 +45,7 @@ class SyncResponse(BaseModel):
     tasks: list[TaskPayload]
     server_time: str
 
+
+class BindConsumeRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
