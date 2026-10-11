@@ -31,7 +31,8 @@ fun ServerBindingApp(
     state: BindingScreenState,
     onCode: (String) -> Unit,
     onRetry: () -> Unit,
-    onInvalidScan: () -> Unit
+    onInvalidScan: () -> Unit,
+    onRescan: () -> Unit = {}
 ) {
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let(onCode) ?: onInvalidScan()
@@ -41,7 +42,7 @@ fun ServerBindingApp(
             ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                 .setPrompt("扫描知识背包中的服务器二维码")
                 .setBeepEnabled(false)
-                .setOrientationLocked(false)
+                .setOrientationLocked(true)
         )
     }
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF5B8DEF))) {
@@ -68,7 +69,7 @@ fun ServerBindingApp(
                     BindingScreenState.Connecting -> ProgressContent("正在连接服务器", "请保持网络连接")
                     BindingScreenState.Syncing -> ProgressContent("服务器连接成功", "正在同步你的任务…")
                     is BindingScreenState.Expired -> ErrorContent("绑定码已失效", "请在知识背包中刷新二维码，然后重新扫描。", "重新扫描", startScan)
-                    is BindingScreenState.Failed -> ErrorContent("无法连接服务器", state.message, "重新尝试", onRetry)
+                    is BindingScreenState.Failed -> ErrorContent("无法连接服务器", state.message, "重新尝试", onRetry, "重新扫码", onRescan)
                 }
             }
         }
@@ -83,10 +84,21 @@ fun ServerBindingApp(
     Text(subtitle, color = Color(0xFFA7ABB3))
 }
 
-@Composable private fun ErrorContent(title: String, subtitle: String, action: String, click: () -> Unit) {
+@Composable private fun ErrorContent(
+    title: String,
+    subtitle: String,
+    primaryAction: String,
+    primaryClick: () -> Unit,
+    secondaryAction: String? = null,
+    secondaryClick: (() -> Unit)? = null
+) {
     Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(12.dp))
     Text(subtitle, color = Color(0xFFA7ABB3), textAlign = TextAlign.Center)
     Spacer(Modifier.height(30.dp))
-    Button(onClick = click, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(action) }
+    Button(onClick = primaryClick, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(primaryAction) }
+    if (secondaryAction != null && secondaryClick != null) {
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = secondaryClick, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) { Text(secondaryAction) }
+    }
 }

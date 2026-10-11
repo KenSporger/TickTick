@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
                         activeBinding = binding
                         showBinding = false
                     } catch (error: Exception) {
-                        screen = BindingScreenState.Failed(error.message ?: "请检查手机网络以及服务器状态。")
+                        screen = BindingScreenState.Failed(parseServerError(error))
                     }
                 }
             }
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
                                 pendingBinding = candidate
                             }
                         } catch (error: Exception) {
-                            screen = BindingScreenState.Failed(error.message ?: "请检查手机网络以及服务器状态。")
+                            screen = BindingScreenState.Failed(parseServerError(error))
                         }
                     }
                 }
@@ -88,8 +88,15 @@ class MainActivity : ComponentActivity() {
                 action()
             }
 
+            fun rescan() {
+                bindingStore.clearPending()
+                pendingBinding = null
+                retryAction = null
+                screen = BindingScreenState.Welcome
+            }
+
             if (showBinding) {
-                ServerBindingApp(screen, ::bind, { retryAction?.invoke() }, { screen = BindingScreenState.Welcome })
+                ServerBindingApp(screen, ::bind, { retryAction?.invoke() }, { screen = BindingScreenState.Welcome }, onRescan = ::rescan)
             } else {
                 val binding = checkNotNull(activeBinding)
                 val factory = remember(binding) { object : ViewModelProvider.Factory {

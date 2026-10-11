@@ -15,6 +15,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
 import okhttp3.OkHttpClient
+import retrofit2.HttpException
 import java.net.URI
 import java.time.Instant
 
@@ -74,6 +75,9 @@ class BindingStore(context: Context) {
         preferences.edit().putString("pending_base_url", binding.baseUrl)
             .putString("pending_access_token", binding.accessToken).commit()
     }
+    fun clearPending() {
+        preferences.edit().remove("pending_base_url").remove("pending_access_token").apply()
+    }
 }
 
 data class ConsumeBindingRequest(val token: String)
@@ -123,5 +127,17 @@ class ServerBootstrapper(private val database: TaskDatabase, private val api: Sy
         val entities = snapshot.map { it.toDomain().toEntity(SyncState.SYNCED) }
         database.taskDao().replaceAllFromServer(entities)
         return entities.size
+    }
+}
+
+/** Extracts a human-readable message from a Retrofit/HTTP error, preferring the server's `detail` field. */
+fun parseServerError(error: Throwable): String {
+    if (error !is HttpException) return error.message ?: "请检查手机网络以及服务器状态。"
+    val body = error.response()?.errorBody()?.string() ?: return error.message ?: "服务器返回 ${error.code()}"
+    return try {
+        val json = Gson().fromJson(body, Map::class.java)
+        json["detail"] as? String ?: error.message ?: "服务器返回 ${error.code()}"
+    } catch (_: Exception) {
+        error.message ?: "服务器返回 ${error.code()}"
     }
 }

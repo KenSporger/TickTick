@@ -123,10 +123,55 @@ abstract class TaskDatabase : RoomDatabase() {
         }
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatInterval INTEGER NOT NULL DEFAULT 1")
-                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatSkipHolidays INTEGER NOT NULL DEFAULT 0")
-                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatExcludedDates TEXT NOT NULL DEFAULT ''")
-                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatUntil TEXT")
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS tasks_new (
+                        `id` TEXT NOT NULL,
+                        `seriesId` TEXT,
+                        `title` TEXT NOT NULL,
+                        `startDate` TEXT,
+                        `endDate` TEXT,
+                        `time` TEXT,
+                        `reminderAt` TEXT,
+                        `repeatKind` TEXT NOT NULL,
+                        `repeatWeekdays` TEXT NOT NULL,
+                        `repeatMonthDay` INTEGER,
+                        `repeatTotalCount` INTEGER,
+                        `repeatOccurrenceIndex` INTEGER NOT NULL,
+                        `repeatInterval` INTEGER NOT NULL DEFAULT 1,
+                        `repeatSkipHolidays` INTEGER NOT NULL DEFAULT 0,
+                        `repeatExcludedDates` TEXT NOT NULL DEFAULT '',
+                        `repeatUntil` TEXT,
+                        `status` TEXT NOT NULL,
+                        `isProjection` INTEGER NOT NULL,
+                        `syncState` TEXT NOT NULL,
+                        `createdAt` TEXT NOT NULL,
+                        `updatedAt` TEXT NOT NULL,
+                        `completedAt` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO tasks_new (
+                        id, seriesId, title, startDate, endDate, time, reminderAt,
+                        repeatKind, repeatWeekdays, repeatMonthDay, repeatTotalCount, repeatOccurrenceIndex,
+                        repeatInterval, repeatSkipHolidays, repeatExcludedDates, repeatUntil,
+                        status, isProjection, syncState, createdAt, updatedAt, completedAt
+                    )
+                    SELECT
+                        id, seriesId, title, startDate, endDate, time, reminderAt,
+                        repeatKind, repeatWeekdays, repeatMonthDay, repeatTotalCount, repeatOccurrenceIndex,
+                        1, 0, '', NULL,
+                        status, isProjection, syncState, createdAt, updatedAt, completedAt
+                    FROM tasks
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE tasks")
+                database.execSQL("ALTER TABLE tasks_new RENAME TO tasks")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_seriesId ON tasks (seriesId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_syncState ON tasks (syncState)")
             }
         }
     }
