@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "version": "v1.1.0",
+  "backend": {"file": "ticktick-backend-v1.1.0.tar.gz", "sha256": "f3549d1ff2df1aacbc5d19e2dfee8e3c5b145839a2b2419a5bb55cf9a4cc732e"},
+  "apk": {"file": "ticktick-1.1.0.apk", "sha256": "65438a562f2ae8cd5d6db4331a7c2289e33987068f6e5eb0414995a9c80774b8"}
+}
